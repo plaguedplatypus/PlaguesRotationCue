@@ -3,5 +3,6 @@ dist/
 tests/
 scripts/
 .vscode/
-package-lock.json
-npm-debug.log*
+
+.DS_Store
+Thumbs.db
