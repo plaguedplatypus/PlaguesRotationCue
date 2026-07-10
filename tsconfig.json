@@ -1,0 +1,12 @@
+// Typescript configuration file
+{
+	"compilerOptions": {
+		"target": "ES2019",
+		"lib": ["DOM", "ES2019"],
+		"resolvePackageJsonExports": true,
+		"moduleResolution": "bundler",
+		"module": "ESNext",
+		"noImplicitAny": true,
+		"strictNullChecks": true
+	}
+}

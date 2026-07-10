@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Rotation Cue</title>
+	<link rel="stylesheet" href="https://runeapps.org/nis/nis.css">
+</head>
+
+<body class="nis">
+	<div id="app" class="app-shell">
+		<header class="app-header">
+			<h1>Rotation Cue</h1>
+			<button id="app-cog" class="icon-button" title="Settings">⚙</button>
+		</header>
+
+		<section id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+			<div class="settings-row">
+				<label><input id="overlay-enabled" type="checkbox" checked> Overlay enabled</label>
+			</div>
+			<div class="settings-row">
+				<label><input id="auto-advance-cue" type="checkbox" checked> Auto-advance Cue</label>
+			</div>
+			<div class="settings-row settings-box">
+				<label><input id="show-large-current-cue" type="checkbox"> Show Large Current Cue</label>
+
+				<div class="settings-row large-cue-action-row">
+					<button id="set-large-cue-position">Set Large Cue Position</button>
+					<span id="large-cue-position-status" class="settings-hint" hidden></span>
+					<span class="settings-hint large-cue-help">Set position: move the preview, then press Alt+1.</span>
+				</div>
+				<div class="settings-row large-cue-action-row">
+					<button id="large-cue-keybinds-toggle">Large Cue Keybinds</button>
+					<span class="settings-hint large-cue-help">Large Cue arrows: hover an arrow and press Alt+1 to skip
+						cues.</span>
+				</div>
+			</div>
+			<div class="settings-row settings-box">
+				<div class="settings-label highlight-color-title">Change Highlight Colors:</div>
+				<div class="highlight-color-options">
+					<label class="highlight-color-label" title="Current ability">
+						<input id="highlight-color-current" type="color" value="#ffd45d">
+						Current
+					</label>
+					<label class="highlight-color-label" title="Other abilities in the rotation">
+						<input id="highlight-color-rotation" type="color" value="#44c7ff">
+						In Rotation
+					</label>
+					<label class="highlight-color-label" title="Abilities verified to be on cooldown">
+						<input id="highlight-color-cooldown" type="color" value="#ff4c4c">
+						Cooldown
+					</label>
+				</div>
+				<div>
+					<button id="reset-highlight-colors" class="button" title="Reset highlight colors"
+						aria-label="Reset highlight colors">Reset Colors</button>
+				</div>
+				<div class="settings-row">
+					<label class="highlight-thickness-label" for="highlight-border-thickness">
+						Border thickness
+						<input id="highlight-border-thickness" type="range" min="1" max="2" step="1" value="1">
+						<output id="highlight-border-thickness-value" for="highlight-border-thickness">1px</output>
+					</label>
+				</div>
+			</div>
+			<div class="settings-row settings-box">
+				<span class="settings-label">Mapped Abilities & Learned Icons:</span>
+				<button id="open-icon-training-settings" data-action="open-bar-map" class="primary"
+					title="Map abilities and manage learned icons">Map Abilities</button>
+			</div>
+			<div class="settings-row compact wrap">
+				<button id="export-profile">Export Profile</button>
+				<label class="file-button">Import Profile <input id="profile-import-file" type="file"
+						accept=".json,application/json"></label>
+			</div>
+			<button data-action="export-runtime-debug" title="Save recent tracking details for a bug report">Export
+				Debug Log</button>
+			<div class="settings-footer-links" aria-label="Settings links">
+				<button id="join-discord" class="settings-text-button" type="button">Join the Discord</button>
+				<button id="app-version" class="settings-text-button settings-version" type="button"></button>
+			</div>
+		</section>
+
+		<nav class="tab-bar" aria-label="Main tabs">
+			<button class="skill-tab active" data-tab="bars">Action Bar</button>
+			<button class="skill-tab" data-tab="rotation">Rotation</button>
+		</nav>
+
+		<main class="content">
+			<section id="tab-bars" class="tab-page active">
+				<div class="panel-title">Action Bar Setup</div>
+				<div id="bar-hint" class="hint"></div>
+
+				<div class="panel-title spaced-title">
+					<span>Bar Alignment</span>
+				</div>
+				<div class="hint configured-bar-guidance">Use Show Boxes to confirm alignment; use the arrows for
+					small adjustments.</div>
+				<div id="tracked-bar-list" class="bar-list"></div>
+			</section>
+
+			<section id="tab-rotation" class="tab-page">
+				<div id="rotation-editor"></div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<div id="status-footer" class="footer-status"></div>
+			<div class="footer-persistent">
+				<span id="selected-footer">No active rotation</span>
+				<span>visual overlay only</span>
+			</div>
+		</footer>
+	</div>
+
+	<input id="rotation-import-file" type="file" accept=".json,application/json" hidden>
+	<script src="./main.js"></script>
+</body>
+
+</html>

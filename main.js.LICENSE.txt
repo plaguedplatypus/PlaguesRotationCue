@@ -1,0 +1,33 @@
+/*! . */
+
+/*! ../fonts/aa_10px_mono.fontmeta.json */
+
+/*! ./alt1api */
+
+/*! ./declarations */
+
+/*! ./imagedata-extensions */
+
+/*! ./imagedetect */
+
+/*! ./imgref */
+
+/*! ./index */
+
+/*! ./nodepolyfill */
+
+/*! ./pasteinput */
+
+/*! ./rect */
+
+/*! ./wrapper */
+
+/*! alt1/base */
+
+/*! alt1/ocr */
+
+/*! canvas */
+
+/*! electron/common */
+
+/*! sharp */
