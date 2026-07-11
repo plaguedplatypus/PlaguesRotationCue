@@ -204,12 +204,9 @@ export function rotationCooldownGuide(abilitySteps: any[]): RotationCooldownGuid
 		.map(([abilityIdValue, positions]) => {
 			const ability = abilityById[abilityIdValue];
 			const cooldown = Number(ability?.cooldown || 0);
-			if (!ability || cooldown <= 2) return null;
+			if (!ability || cooldown <= 2 || positions.length < 2) return null;
 
-			const gaps = positions.map((position, index) => {
-				const next = positions[index + 1] ?? positions[0] + steps.length;
-				return next - position;
-			});
+			const gaps = positions.slice(0, -1).map((position, index) => positions[index + 1] - position);
 			const gapSteps = Math.min(...gaps);
 			const estimatedRepeatSeconds = Math.round(gapSteps * AUTHORED_STEP_SECONDS * 10) / 10;
 			const earlyBySeconds = Math.round(Math.max(0, cooldown - estimatedRepeatSeconds) * 10) / 10;

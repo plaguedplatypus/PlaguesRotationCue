@@ -83,7 +83,7 @@ Open Settings, click **Large Cue Keybinds**, then TYPE the label you want to see
 
 Short labels work best. Shift+Q -> s-Q
 
-## Import And Export
+## Sharing Rotations
 
-* Rotation **Export** and **Import to** share one a rotation.
+* Rotation **Export** and **Import** to sharee a rotation.
 

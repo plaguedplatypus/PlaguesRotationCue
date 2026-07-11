@@ -232,7 +232,22 @@ const blue = alt1Color(DEFAULT_HIGHLIGHT_COLORS.rotation);
 		getPauseUntil: () => pauseUntil,
 	});
 	a1lib.on("rsfocus", () => cueOverlayApi.invalidate());
-	a1lib.on("rslinked", () => cueOverlayApi.invalidate());
+	a1lib.on("rslinked", () => {
+		if (window.alt1?.rsLinked === false) {
+			cueOverlayApi.clearRotationOverlays();
+			cueOverlayApi.clearGroup(PREVIEW_GROUP);
+			return;
+		}
+		cueOverlayApi.invalidate();
+	});
+
+	function clearOverlayGroupsForShutdown() {
+		cueOverlayApi.clearRotationOverlays();
+		cueOverlayApi.clearGroup(PREVIEW_GROUP);
+	}
+	window.addEventListener("pagehide", clearOverlayGroupsForShutdown);
+	window.addEventListener("beforeunload", clearOverlayGroupsForShutdown);
+	window.addEventListener("unload", clearOverlayGroupsForShutdown);
 
 	function stopLargeCuePositionPreview(clear = true) {
 		if (largeCuePositionPreviewTimer !== null) {
