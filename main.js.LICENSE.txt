@@ -1,7 +1,5 @@
 /*! . */
 
-/*! ../fonts/aa_10px_mono.fontmeta.json */
-
 /*! ./alt1api */
 
 /*! ./declarations */
@@ -23,8 +21,6 @@
 /*! ./wrapper */
 
 /*! alt1/base */
-
-/*! alt1/ocr */
 
 /*! canvas */
 

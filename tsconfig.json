@@ -1,12 +1,13 @@
-// Typescript configuration file
 {
-	"compilerOptions": {
-		"target": "ES2019",
-		"lib": ["DOM", "ES2019"],
-		"resolvePackageJsonExports": true,
-		"moduleResolution": "bundler",
-		"module": "ESNext",
-		"noImplicitAny": true,
-		"strictNullChecks": true
-	}
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["DOM", "ES2020"],
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

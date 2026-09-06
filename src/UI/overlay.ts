@@ -1,515 +1,340 @@
 import { encodeImageString } from "alt1/base";
-import { getSlotHighlightRect, getSlotRect, type SlotBounds as SlotHighlightGeometry } from "../Rotation/slotGeometry";
-import { clampInt } from "../utils";
-import { createLargeCueOverlay, type LabelBadge } from "./largeCueOverlay";
+import { rotationEntryById } from "../data/abilities";
+import type { CueItem, ScreenPoint } from "../types";
 
-export { buildLargeCueDisplay } from "./largeCueOverlay";
+const GROUP_NAME = "rotation-cue-strip";
+const CUE_COUNT = 4;
+const OVERLAY_LIFETIME_MS = 20_000;
+const OVERLAY_REFRESH_MS = 10_000;
 
-function compactSequenceLabel(label: string) {
-	const parts = label.split("/");
-	return parts.length > 1
-		? `${parts[0]}+`
-		: label;
+export function isAlt1Available(): boolean {
+  return typeof window.alt1 !== "undefined";
 }
 
-type CueOverlayDeps = {
-	app: any;
-	cueGroup: string;
-	stateGroup: string;
-	guidanceGroup: string;
-	largeCueGroup: string;
-	yellow: any;
-	blue: any;
-	renderLabelBadge?: (label: string, color: any, maxWidth: number) => LabelBadge | null;
-	renderLargeCueBitmap?: (abilityId: string, label: string, color: any, size: number) => LabelBadge | null;
-	renderLargeCueSequenceBadge?: (label: string, color: any, compact: boolean) => LabelBadge | null;
-	getAbilityIconSrc?: (abilityId: string) => string;
-	getLargeCueKeybind?: (barId: string, slot: number) => string;
-	getAbilityLabel?: (abilityId: string) => string;
-	getHighlightColor?: (key: "current" | "rotation" | "cooldown") => any;
-	getBorderThickness?: () => number;
-	isLargeCuePlacementActive?: () => boolean;
-	getConfiguredBar: (id: string) => any;
-	cueKey: (cue: any) => string;
-	getLastKey: () => string;
-	setLastKey: (value: string) => void;
-	getPauseUntil: () => number;
-};
+export class Alt1CueOverlay {
+  private imageCache = new Map<string, Promise<HTMLImageElement | null>>();
+  private lastSignature = "";
+  private lastDrawAt = 0;
+  private position: ScreenPoint | null = null;
+  private scale = 1;
+  private borderThickness = 2;
+  private borderColor = "#f2c94c";
+  private opacity = 1;
+  private showAbilityNames = true;
+  private showNextLabel = true;
+  private placementDrawInProgress = false;
 
-export function createCueOverlayApi(deps: CueOverlayDeps) {
-	const overlayLifetime = 20000;
-	const refreshInterval = 10000;
-	let lastCueDrawAt = 0;
-	let lastStateDrawAt = 0;
-	let lastStateSignature = "";
-	let lastGuidanceDrawAt = 0;
-	let lastGuidanceSignature = "";
-	const labelBadgeCache = new Map<string, LabelBadge>();
+  async draw(cues: CueItem[]): Promise<void> {
+    await this.drawAt(cues, this.position, false);
+  }
 
-	function cssColor(color: any) {
-		const unsignedColor = Number(color) >>> 0;
-		return `rgb(${(unsignedColor >>> 16) & 255}, ${(unsignedColor >>> 8) & 255}, ${unsignedColor & 255})`;
-	}
+  async drawPlacementPreview(cues: CueItem[], position: ScreenPoint): Promise<void> {
+    if (this.placementDrawInProgress) return;
+    this.placementDrawInProgress = true;
+    try {
+      await this.drawAt(cues, position, true);
+    } finally {
+      this.placementDrawInProgress = false;
+    }
+  }
 
-	function renderLabelBadge(label: string, color: any, maxWidth: number): LabelBadge | null {
-		const badgeMaxWidth = Math.max(3, Math.floor(maxWidth));
-		const key = `${label}:${Number(color) >>> 0}:${badgeMaxWidth}`;
-		const cached = labelBadgeCache.get(key);
-		if (cached) return cached;
-		if (typeof document === "undefined") return null;
+  setPosition(position: ScreenPoint | null): void {
+    if (this.position?.x === position?.x && this.position?.y === position?.y) return;
+    this.position = position ? { ...position } : null;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-		const canvas = document.createElement("canvas");
-		const context = canvas.getContext("2d");
-		if (!context) return null;
+  setScale(percent: number): void {
+    const scale = Math.max(0.25, Math.min(1, percent / 100));
+    if (this.scale === scale) return;
+    this.scale = scale;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-		let renderedLabel = label;
-		let fontSize = 13;
-		let font = `${fontSize}px "Arial Black", Arial, sans-serif`;
-		context.font = font;
-		let metrics = context.measureText(renderedLabel);
-		while (
-			Math.ceil(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) + 2 > badgeMaxWidth &&
-			fontSize > 7
-		) {
-			fontSize--;
-			font = `${fontSize}px "Arial Black", Arial, sans-serif`;
-			context.font = font;
-			metrics = context.measureText(renderedLabel);
-		}
-		if (Math.ceil(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) + 2 > badgeMaxWidth) {
-			renderedLabel = "...";
-			fontSize = 10;
-			font = `${fontSize}px "Arial Black", Arial, sans-serif`;
-			context.font = font;
-			metrics = context.measureText(renderedLabel);
-		}
-		const left = Math.ceil(Math.max(0, metrics.actualBoundingBoxLeft || 0));
-		const right = Math.ceil(metrics.actualBoundingBoxRight || metrics.width);
-		const ascent = Math.ceil(metrics.actualBoundingBoxAscent || 9);
-		const descent = Math.ceil(Number.isFinite(metrics.actualBoundingBoxDescent)
-			? metrics.actualBoundingBoxDescent
-			: 2);
-		const padding = 1;
-		const measuredWidth = left + right;
-		canvas.width = Math.max(3, Math.min(
-			badgeMaxWidth,
-			measuredWidth + padding * 2
-		));
-		canvas.height = Math.max(3, ascent + descent + padding * 2);
+  setBorderThickness(thickness: number): void {
+    const nextThickness = Math.max(0, Math.min(3, Math.round(thickness)));
+    if (this.borderThickness === nextThickness) return;
+    this.borderThickness = nextThickness;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-		const drawContext = canvas.getContext("2d");
-		if (!drawContext) return null;
-		drawContext.fillStyle = "#080808";
-		drawContext.fillRect(0, 0, canvas.width, canvas.height);
-		drawContext.font = font;
-		drawContext.textAlign = "left";
-		drawContext.textBaseline = "alphabetic";
-		drawContext.fillStyle = cssColor(color);
-		drawContext.fillText(renderedLabel, padding + left, padding + ascent);
+  setBorderColor(color: string): void {
+    const nextColor = /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "#f2c94c";
+    if (this.borderColor === nextColor) return;
+    this.borderColor = nextColor;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-		const badge = {
-			image: encodeImageString(drawContext.getImageData(0, 0, canvas.width, canvas.height)),
-			width: canvas.width,
-			height: canvas.height,
-		};
-		labelBadgeCache.set(key, badge);
-		return badge;
-	}
+  setOpacity(percent: number): void {
+    const opacity = Math.max(0.25, Math.min(1, percent / 100));
+    if (this.opacity === opacity) return;
+    this.opacity = opacity;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-	function highlightColor(key: "current" | "rotation" | "cooldown") {
-		if (deps.getHighlightColor) return deps.getHighlightColor(key);
-		if (key === "current") return deps.yellow;
-		if (key === "rotation") return deps.blue;
-		return (deps as any).red;
-	}
+  setShowAbilityNames(show: boolean): void {
+    if (this.showAbilityNames === show) return;
+    this.showAbilityNames = show;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-	function borderThickness() {
-		return clampInt(deps.getBorderThickness?.(), 1, 2, 1);
-	}
+  setShowNextLabel(show: boolean): void {
+    if (this.showNextLabel === show) return;
+    this.showNextLabel = show;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+  }
 
-	function beginGroup(alt1: any, group: string) {
-		alt1.overLaySetGroup(group);
-		const canResume = typeof alt1.overLayFreezeGroup === "function" &&
-			typeof alt1.overLayContinueGroup === "function";
-		if (canResume) alt1.overLayFreezeGroup(group);
-		alt1.overLayClearGroup(group);
-		return canResume;
-	}
+  private async drawAt(cues: CueItem[], position: ScreenPoint | null, placementPreview: boolean): Promise<void> {
+    if (!isAlt1Available()) return;
+    if (!cues.length && !placementPreview) {
+      this.clear();
+      return;
+    }
 
-	function finishGroup(alt1: any, group: string, frozen: boolean) {
-		if (frozen) alt1.overLayContinueGroup(group);
-	}
+    const positionSignature = position ? `${position.x},${position.y}` : "default";
+    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showAbilityNames}:${this.showNextLabel}`;
+    if (!placementPreview && signature === this.lastSignature
+      && Date.now() - this.lastDrawAt < OVERLAY_REFRESH_MS) return;
 
-	function canDraw() {
-		return deps.app.overlayEnabled &&
-			!!window.alt1 &&
-			Date.now() >= deps.getPauseUntil();
-	}
+    const canvas = document.createElement("canvas");
+    const tileWidth = 72;
+    const gap = 5;
+    const frameSize = 60;
+    const iconSize = 54;
+    const frameY = this.showNextLabel ? 12 : 0;
+    const tileHeight = frameY + frameSize + (this.showAbilityNames ? 10 : 0);
+    const logicalWidth = cues.length
+      ? cues.length * tileWidth + (cues.length - 1) * gap
+      : tileWidth * CUE_COUNT + (CUE_COUNT - 1) * gap;
+    const logicalHeight = tileHeight;
+    canvas.width = Math.max(1, Math.round(logicalWidth * this.scale));
+    canvas.height = Math.max(1, Math.round(logicalHeight * this.scale));
+    const context = canvas.getContext("2d");
+    if (!context) return;
 
-	function overlayContextInactive() {
-		const appWindowActive =
-			typeof window.document?.hasFocus === "function" &&
-			window.document.hasFocus();
-		return window.alt1?.rsActive === false && !appWindowActive;
-	}
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.scale(this.scale, this.scale);
+    const loadedIcons = await Promise.all(cues.map((cue) => {
+      const icon = rotationEntryById.get(cue.step.abilityId)?.icon;
+      return icon ? this.loadImage(icon) : Promise.resolve(null);
+    }));
 
-	const largeCueOverlay = createLargeCueOverlay({
-		app: deps.app,
-		largeCueGroup: deps.largeCueGroup,
-		overlayLifetime,
-		refreshInterval,
-		renderLargeCueBitmap: deps.renderLargeCueBitmap,
-		renderLargeCueSequenceBadge: deps.renderLargeCueSequenceBadge,
-		getAbilityIconSrc: deps.getAbilityIconSrc,
-		getLargeCueKeybind: deps.getLargeCueKeybind,
-		getAbilityLabel: deps.getAbilityLabel,
-		getHighlightColor: highlightColor,
-		getBorderThickness: borderThickness,
-		isLargeCuePlacementActive: deps.isLargeCuePlacementActive,
-		getPauseUntil: deps.getPauseUntil,
-		overlayContextInactive,
-	});
+    cues.forEach((cue, index) => {
+      const ability = rotationEntryById.get(cue.step.abilityId);
+      const x = index * (tileWidth + gap);
+      const current = cue.offset === 0;
+      const frameX = x + Math.round((tileWidth - frameSize) / 2);
 
-	function clearGroup(group: string) {
-		if (group === deps.largeCueGroup) {
-			largeCueOverlay.clearLargeCue();
-			return;
-		}
-		if (!window.alt1) return;
-		try {
-			window.alt1.overLaySetGroup(group);
-			window.alt1.overLayClearGroup(group);
-			window.alt1.overLayRefreshGroup(group);
-		} catch { /* Alt1 may reject overlay calls while closing. */ }
-		if (group === deps.cueGroup) lastCueDrawAt = 0;
-		if (group === deps.stateGroup) {
-			lastStateDrawAt = 0;
-			lastStateSignature = "";
-		}
-		if (group === deps.guidanceGroup) {
-			lastGuidanceDrawAt = 0;
-			lastGuidanceSignature = "";
-		}
-	}
+      context.fillStyle = "rgba(13, 17, 23, 0.94)";
+      context.fillRect(frameX + 3, frameY + 3, iconSize, iconSize);
+      const icon = loadedIcons[index];
+      if (icon) context.drawImage(icon, frameX + 3, frameY + 3, iconSize, iconSize);
+      const borderThickness = current ? this.borderThickness : 0;
+      if (borderThickness > 0) {
+        context.strokeStyle = this.borderColor;
+        context.lineWidth = borderThickness;
+        context.strokeRect(
+          frameX + 3,
+          frameY + 3,
+          iconSize,
+          iconSize
+        );
+      }
 
-	function clearRotationOverlays() {
-		clearGroup(deps.stateGroup);
-		clearGroup(deps.guidanceGroup);
-		clearGroup(deps.cueGroup);
-		largeCueOverlay.clearLargeCue();
-		deps.setLastKey("");
-	}
+      context.textAlign = "center";
+      context.textBaseline = "alphabetic";
+      if (current && this.showNextLabel) {
+        const positionLabel = "NEXT";
+        context.font = "bold 10px Arial";
+        const positionWidth = Math.max(26, Math.ceil(context.measureText(positionLabel).width) + 8);
+        const positionX = x + Math.round((tileWidth - positionWidth) / 2);
+        context.fillStyle = "rgba(13, 17, 23, 0.96)";
+        context.fillRect(positionX, 0, positionWidth, 13);
+        if (this.borderThickness > 0) {
+          context.strokeStyle = this.borderColor;
+          context.lineWidth = this.borderThickness;
+          const badgeInset = this.borderThickness / 2;
+          context.strokeRect(
+            positionX + badgeInset,
+            badgeInset,
+            positionWidth - this.borderThickness,
+            13 - this.borderThickness
+          );
+        }
+        context.fillStyle = "#f2c94c";
+        context.fillText(positionLabel, x + tileWidth / 2, 10);
+      }
 
-	function invalidate() {
-		lastCueDrawAt = 0;
-		lastStateDrawAt = 0;
-		lastGuidanceDrawAt = 0;
-		largeCueOverlay.invalidate();
-	}
+      if (index > 0) {
+        drawCueArrow(context, x - gap / 2, frameY + frameSize / 2);
+      }
 
-	type SlotHighlightBounds = SlotHighlightGeometry & {
-		thickness: number;
-	};
+      if (this.showAbilityNames) {
+        context.fillStyle = "#f2f5f7";
+        context.font = "9px Arial";
+        const label = this.fitLabel(context, ability?.name ?? cue.step.abilityId, tileWidth - 6);
+        const nameWidth = Math.min(tileWidth, Math.ceil(context.measureText(label).width) + 6);
+        const nameX = x + Math.round((tileWidth - nameWidth) / 2);
+        context.fillStyle = "rgba(13, 17, 23, 0.96)";
+        context.fillRect(nameX, frameY + frameSize, nameWidth, 10);
+        context.fillStyle = "#f2f5f7";
+        context.fillText(label, x + tileWidth / 2, frameY + frameSize + 8);
+      }
+    });
 
-	function slotHighlightBounds(bar: any, slot: any): SlotHighlightBounds | null {
-		const bounds = getSlotHighlightRect(bar, slot);
-		if (!bounds) return null;
+    if (!cues.length) {
+      context.fillStyle = "rgba(13, 17, 23, 0.92)";
+      context.fillRect(0, 0, logicalWidth, logicalHeight);
+      context.strokeStyle = "#f2c94c";
+      context.lineWidth = 2;
+      context.strokeRect(1, 1, logicalWidth - 2, logicalHeight - 2);
+      context.fillStyle = "#f2c94c";
+      context.font = "bold 14px Arial";
+      context.textAlign = "center";
+      context.fillText("ROTATION CUE", logicalWidth / 2, 42);
+      context.fillStyle = "#f2f5f7";
+      context.font = "11px Arial";
+      context.fillText("Overlay position preview", logicalWidth / 2, 61);
+    }
 
-		return {
-			// Keep the 1px highlight bounds fixed. Additional thickness is drawn
-			// as extra 1px outline layers outside these bounds so the inner edge
-			// does not shift when the slider changes from 1px to 2px.
-			...bounds,
-			thickness: borderThickness(),
-		};
-	}
+    try {
+      const alt1 = window.alt1;
+      alt1.overLaySetGroup(GROUP_NAME);
+      const canContinue = typeof alt1.overLayFreezeGroup === "function"
+        && typeof alt1.overLayContinueGroup === "function";
+      if (canContinue) alt1.overLayFreezeGroup(GROUP_NAME);
+      alt1.overLayClearGroup(GROUP_NAME);
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const iconOpacityRegions = cues.map((_cue, index) => {
+        const frameX = index * (tileWidth + gap) + Math.round((tileWidth - frameSize) / 2);
+        return scaledRegion(frameX + 3, frameY + 3, iconSize, iconSize, this.scale);
+      });
+      applyOverlayOpacity(imageData, this.opacity, iconOpacityRegions);
+      const encoded = encodeImageString(imageData);
+      const rsWidth = Number(alt1.rsWidth);
+      const rsHeight = Number(alt1.rsHeight);
+      const defaultX = Math.max(8, Math.round((rsWidth - canvas.width) / 2));
+      const x = position
+        ? clampCoordinate(Math.round(position.x - canvas.width / 2), rsWidth - canvas.width)
+        : defaultX;
+      const y = position
+        ? clampCoordinate(Math.round(position.y - canvas.height / 2), rsHeight - canvas.height)
+        : 72;
+      alt1.overLayImage(x, y, encoded, canvas.width, placementPreview ? 700 : OVERLAY_LIFETIME_MS);
+      if (canContinue) alt1.overLayContinueGroup(GROUP_NAME);
+      else alt1.overLayRefreshGroup(GROUP_NAME);
+      if (!placementPreview) {
+        this.lastSignature = signature;
+        this.lastDrawAt = Date.now();
+      }
+    } catch (error) {
+      console.warn("Rotation Cue overlay draw failed", error);
+    }
+  }
 
-	function highlightLayerBounds(bounds: SlotHighlightBounds, layer: number): SlotHighlightBounds {
-		const x = bounds.x - layer;
-		const y = bounds.y - layer;
-		const right = bounds.right + layer;
-		const bottom = bounds.bottom + layer;
+  clear(): void {
+    if (!isAlt1Available()) return;
+    try {
+      window.alt1.overLaySetGroup(GROUP_NAME);
+      window.alt1.overLayClearGroup(GROUP_NAME);
+      window.alt1.overLayRefreshGroup(GROUP_NAME);
+      this.lastSignature = "";
+      this.lastDrawAt = 0;
+    } catch {
+    }
+  }
 
-		return {
-			x,
-			y,
-			right,
-			bottom,
-			width: Math.max(1, right - x),
-			height: Math.max(1, bottom - y),
-			thickness: 1,
-		};
-	}
+  private loadImage(src: string): Promise<HTMLImageElement | null> {
+    const cached = this.imageCache.get(src);
+    if (cached) return cached;
+    const pending = new Promise<HTMLImageElement | null>((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = src;
+    });
+    this.imageCache.set(src, pending);
+    return pending;
+  }
 
-	function drawHighlightLine(
-		color: any,
-		x1: number,
-		y1: number,
-		x2: number,
-		y2: number,
-		lifetime: number
-	) {
-		window.alt1?.overLayLine(color, 1, x1, y1, x2, y2, lifetime);
-	}
+  private fitLabel(context: CanvasRenderingContext2D, value: string, maxWidth: number): string {
+    if (context.measureText(value).width <= maxWidth) return value;
+    let label = value;
+    while (label.length > 3 && context.measureText(`${label}…`).width > maxWidth) {
+      label = label.slice(0, -1);
+    }
+    return `${label}…`;
+  }
+}
 
-	function drawSlotBox(bar: any, slot: any, color: any, lifetime: number) {
-		if (!window.alt1) return;
-		const bounds = slotHighlightBounds(bar, slot);
-		if (!bounds) return;
+function clampCoordinate(value: number, maximum: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(maximum)) return 0;
+  return Math.max(0, Math.min(value, Math.max(0, maximum)));
+}
 
-		// Draw each thickness level as a separate 1px outline. This avoids
-		// Alt1 line-thickness centering semantics shifting the highlight when
-		// the border slider is increased.
-		for (let layer = 0; layer < bounds.thickness; layer++) {
-			const layerBounds = highlightLayerBounds(bounds, layer);
-			drawHighlightLine(color, layerBounds.x, layerBounds.y, layerBounds.right, layerBounds.y, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.y, layerBounds.right, layerBounds.bottom, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.bottom, layerBounds.x, layerBounds.bottom, lifetime);
-			drawHighlightLine(color, layerBounds.x, layerBounds.bottom, layerBounds.x, layerBounds.y, lifetime);
-		}
-	}
+function drawCueArrow(context: CanvasRenderingContext2D, centerX: number, centerY: number): void {
+  context.fillStyle = "rgba(13, 17, 23, 0.94)";
+  context.fillRect(centerX - 6, centerY - 8, 12, 16);
+  context.strokeStyle = "#485260";
+  context.lineWidth = 1;
+  context.strokeRect(centerX - 5.5, centerY - 7.5, 11, 15);
 
-	function drawManualCorners(bar: any, slot: any, color: any, lifetime: number) {
-		if (!window.alt1) return;
-		const bounds = slotHighlightBounds(bar, slot);
-		if (!bounds) return;
-		const length = 6;
+  context.beginPath();
+  context.moveTo(centerX - 2.5, centerY - 4);
+  context.lineTo(centerX + 2, centerY);
+  context.lineTo(centerX - 2.5, centerY + 4);
+  context.strokeStyle = "#f2c94c";
+  context.lineWidth = 2;
+  context.lineCap = "square";
+  context.lineJoin = "miter";
+  context.stroke();
+}
 
-		for (let layer = 0; layer < bounds.thickness; layer++) {
-			const layerBounds = highlightLayerBounds(bounds, layer);
-			drawHighlightLine(color, layerBounds.x, layerBounds.y, layerBounds.x + length, layerBounds.y, lifetime);
-			drawHighlightLine(color, layerBounds.x, layerBounds.y, layerBounds.x, layerBounds.y + length, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.y, layerBounds.right - length, layerBounds.y, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.y, layerBounds.right, layerBounds.y + length, lifetime);
-			drawHighlightLine(color, layerBounds.x, layerBounds.bottom, layerBounds.x + length, layerBounds.bottom, lifetime);
-			drawHighlightLine(color, layerBounds.x, layerBounds.bottom, layerBounds.x, layerBounds.bottom - length, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.bottom, layerBounds.right - length, layerBounds.bottom, lifetime);
-			drawHighlightLine(color, layerBounds.right, layerBounds.bottom, layerBounds.right, layerBounds.bottom - length, lifetime);
-		}
-	}
+const OPACITY_BAYER_8X8 = [
+   0, 32,  8, 40,  2, 34, 10, 42,
+  48, 16, 56, 24, 50, 18, 58, 26,
+  12, 44,  4, 36, 14, 46,  6, 38,
+  60, 28, 52, 20, 62, 30, 54, 22,
+   3, 35, 11, 43,  1, 33,  9, 41,
+  51, 19, 59, 27, 49, 17, 57, 25,
+  15, 47,  7, 39, 13, 45,  5, 37,
+  63, 31, 55, 23, 61, 29, 53, 21
+];
 
-	function drawSequenceLabel(
-		bar: any,
-		slot: any,
-		labelValue: any,
-		lifetime: number
-	) {
-		const alt1 = window.alt1;
-		if (!alt1) return;
-		const drawSlot = getSlotRect(bar, slot);
-		if (!drawSlot) return;
-		const x = drawSlot.x;
-		const y = drawSlot.y;
-		const rawLabel = String(labelValue || "");
-		if (!rawLabel) return;
-		const label = compactSequenceLabel(rawLabel);
-		const currentColor = highlightColor("current");
-		const maxWidth = Math.max(3, Math.floor(slot.width));
-		const badge = deps.renderLabelBadge?.(label, currentColor, maxWidth) ||
-			renderLabelBadge(label, currentColor, maxWidth);
-		if (badge && typeof alt1.overLayImage === "function") {
-			alt1.overLayImage(
-				x + slot.width - badge.width,
-				y + slot.height - badge.height,
-				badge.image,
-				badge.width,
-				lifetime
-			);
-			return;
-		}
+type PixelRegion = { left: number; top: number; right: number; bottom: number };
 
-		const fontSize = 11;
-		const textX = x + slot.width;
-		const textY = y + slot.height - 5;
-		if (typeof alt1.overLayTextEx === "function") {
-			alt1.overLayTextEx(label, currentColor, fontSize, textX, textY, lifetime, "Arial Black", true, true);
-		} else {
-			alt1.overLayText(label, currentColor, fontSize, textX - Math.round(label.length * 4), textY, lifetime);
-		}
-	}
+function scaledRegion(x: number, y: number, width: number, height: number, scale: number): PixelRegion {
+  return {
+    left: Math.floor(x * scale),
+    top: Math.floor(y * scale),
+    right: Math.ceil((x + width) * scale),
+    bottom: Math.ceil((y + height) * scale)
+  };
+}
 
-	function stateColor(state: string) {
-		if (state === "cooldown") return highlightColor("cooldown");
-		if (state === "ready-idle") return highlightColor("rotation");
-		return null;
-	}
-
-	function uniqueStateItems(items: any[]) {
-		const priority: Record<string, number> = {
-			current: 6,
-			cooldown: 5,
-			unknown: 3,
-			unmapped: 2,
-			"ready-idle": 1,
-			"manual-idle": 0,
-		};
-		const unique = new Map<string, any>();
-
-		for (const item of items) {
-			if (!item?.step?.mapped) continue;
-			const key = `${item.step.barId}:${Number(item.step.slot)}`;
-			const previous = unique.get(key);
-			const previousManualState = String(previous?.manualState || "");
-
-			if (item.state === "manual-idle") {
-				const manualState = "manual-idle";
-				unique.set(key, previous
-					? { ...previous, manualState }
-					: { ...item, manualState });
-				continue;
-			}
-
-			if (!previous || previous.state.startsWith("manual-") || (priority[item.state] || 0) > (priority[previous.state] || 0)) {
-				unique.set(key, { ...item, manualState: previousManualState });
-			}
-		}
-
-		return Array.from(unique.values());
-	}
-
-	function drawRotationState(items: any[]) {
-		if (!canDraw()) return;
-		if (!Array.isArray(items) || !items.length) {
-			if (lastStateSignature) clearGroup(deps.stateGroup);
-			return;
-		}
-
-		const now = Date.now();
-		const uniqueItems = uniqueStateItems(items);
-		const signature = uniqueItems
-			.map(item => `${item.step.barId}:${Number(item.step.slot)}:${item.state}:${item.manualState || ""}`)
-			.sort()
-			.join("|") + `:${highlightColor("rotation")}:${highlightColor("cooldown")}:${borderThickness()}`;
-		if (
-			signature === lastStateSignature &&
-			(overlayContextInactive() || now - lastStateDrawAt < refreshInterval)
-		) return;
-
-		try {
-			const alt1 = window.alt1;
-			const frozen = beginGroup(alt1, deps.stateGroup);
-
-			for (const item of uniqueItems) {
-				if (!item?.step?.mapped) continue;
-				const bar = deps.getConfiguredBar(item.step.barId);
-				const slot = bar?.slots?.[Number(item.step.slot) - 1];
-				if (!bar || !slot) continue;
-
-				const color = stateColor(String(item.state || ""));
-				if (color) {
-					drawSlotBox(bar, slot, color, overlayLifetime);
-				}
-
-				if (item.manualState) {
-					drawManualCorners(
-						bar,
-						slot,
-						highlightColor("rotation"),
-						overlayLifetime
-					);
-				}
-			}
-
-			finishGroup(alt1, deps.stateGroup, frozen);
-			lastStateSignature = signature;
-			lastStateDrawAt = now;
-		} catch (error) {
-			console.warn("Rotation state overlay draw failed", error);
-		}
-	}
-
-	function drawManualGuidance(items: any[]) {
-		if (!canDraw()) return;
-		const unique = new Map<string, any>();
-		for (const item of items || []) {
-			if (!item?.step?.mapped) continue;
-			const key = `${item.step.barId}:${Number(item.step.slot)}`;
-			const previous = unique.get(key);
-			const labels = [...(previous?.labels || [])];
-			const label = String(item.label || "");
-			if (label && !labels.includes(label)) labels.push(label);
-			unique.set(key, { ...item, labels });
-		}
-
-		const uniqueItems = Array.from(unique.values());
-		if (!uniqueItems.length) {
-			if (lastGuidanceSignature) clearGroup(deps.guidanceGroup);
-			return;
-		}
-
-		const now = Date.now();
-		const signature = uniqueItems
-			.map(item => `${item.step.barId}:${Number(item.step.slot)}:${item.labels.join("/")}`)
-			.sort()
-			.join("|") + `:${highlightColor("current")}:${borderThickness()}`;
-		if (
-			signature === lastGuidanceSignature &&
-			(overlayContextInactive() || now - lastGuidanceDrawAt < refreshInterval)
-		) return;
-
-		try {
-			const alt1 = window.alt1;
-			const frozen = beginGroup(alt1, deps.guidanceGroup);
-
-			for (const item of uniqueItems) {
-				const bar = deps.getConfiguredBar(item.step.barId);
-				const slot = bar?.slots?.[Number(item.step.slot) - 1];
-				if (!bar || !slot) continue;
-				drawSlotBox(bar, slot, highlightColor("current"), overlayLifetime);
-				drawSequenceLabel(bar, slot, item.labels.join("/"), overlayLifetime);
-			}
-
-			finishGroup(alt1, deps.guidanceGroup, frozen);
-			lastGuidanceSignature = signature;
-			lastGuidanceDrawAt = now;
-		} catch (error) {
-			console.warn("Manual guidance overlay draw failed", error);
-		}
-	}
-
-	function drawCue(cue: any) {
-		if (!canDraw()) return;
-		const anchorStep = cue?.anchorStep || cue?.step;
-		if (!cue || !anchorStep || cue.mode === "none") {
-			if (deps.getLastKey()) clearGroup(deps.cueGroup);
-			deps.setLastKey("");
-			return;
-		}
-
-		const bar = deps.getConfiguredBar(anchorStep.barId);
-		const slot = bar?.slots?.[Number(anchorStep.slot) - 1];
-		if (!bar || !slot) return;
-
-		const currentColor = highlightColor("current");
-		const key = `${deps.cueKey(cue)}:${currentColor}:${borderThickness()}`;
-		const now = Date.now();
-		if (
-			key === deps.getLastKey() &&
-			(overlayContextInactive() || now - lastCueDrawAt < refreshInterval)
-		) return;
-		deps.setLastKey(key);
-
-		try {
-			const alt1 = window.alt1;
-			const frozen = beginGroup(alt1, deps.cueGroup);
-			drawSlotBox(bar, slot, currentColor, overlayLifetime);
-			drawSequenceLabel(bar, slot, cue.anchorSequenceLabel || cue.sequenceLabel, overlayLifetime);
-			finishGroup(alt1, deps.cueGroup, frozen);
-			lastCueDrawAt = now;
-		} catch (error) {
-			console.warn("Overlay draw failed", error);
-		}
-	}
-
-	return {
-		clearGroup,
-		clearLargeCue: largeCueOverlay.clearLargeCue,
-		clearRotationOverlays,
-		invalidate,
-		drawLargeCuePlacementPreview: largeCueOverlay.drawLargeCuePlacementPreview,
-		drawRotationState,
-		drawManualGuidance,
-		drawCue,
-		drawLargeCue: largeCueOverlay.drawLargeCue,
-	};
+function applyOverlayOpacity(image: ImageData, opacity: number, regions: PixelRegion[]): void {
+  if (opacity >= 1) return;
+  const visibleLevels = Math.max(0, Math.min(64, Math.round(opacity * 64)));
+  for (const region of regions) {
+    const left = Math.max(0, region.left);
+    const top = Math.max(0, region.top);
+    const right = Math.min(image.width, region.right);
+    const bottom = Math.min(image.height, region.bottom);
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = left; x < right; x += 1) {
+        const alphaIndex = (y * image.width + x) * 4 + 3;
+        if (image.data[alphaIndex] === 0) continue;
+        if (OPACITY_BAYER_8X8[(y % 8) * 8 + (x % 8)] >= visibleLevels) {
+          image.data[alphaIndex] = 0;
+        }
+      }
+    }
+  }
 }

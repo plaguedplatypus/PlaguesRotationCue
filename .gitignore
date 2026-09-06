@@ -1,8 +1,7 @@
 node_modules/
 dist/
 tests/
-scripts/
 .vscode/
-
-.DS_Store
-Thumbs.db
+package-lock.json
+npm-debug.log*
+*.js.map

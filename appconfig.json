@@ -1,14 +1,14 @@
 {
-  "appName": "Plague's Rotation Cue",
-  "description": "Highlights the next ability in a configured rotation.",
+  "appName": "Rotation Cue",
+  "description": "Shows the current and upcoming steps in a RuneScape ability rotation.",
   "appUrl": "./index.html",
   "configUrl": "./appconfig.json",
   "iconUrl": "./assets/icon.png",
-  "defaultWidth": 600,
-  "defaultHeight": 350,
-  "minWidth": 288,
-  "minHeight": 200,
+  "defaultWidth": 760,
+  "defaultHeight": 760,
+  "minWidth": 360,
+  "minHeight": 480,
   "requestHandlers": [],
   "activators": [],
-  "permissions": "pixel,gamestate,overlay"
+  "permissions": "pixel,overlay"
 }

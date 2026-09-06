@@ -1,89 +1,109 @@
-# Plague's Rotation Cue
+# Rotation Cue
 
-Plague's Rotation Cue is an app that helps you build a shareable rotation, then shows a visual cue over your action bar for what to press next.
+Rotation Cue helps you follow an ability rotation in RuneScape.
 
-This app is only a visual aid. It does not press keys. It does not play the game for you.
+A rotation is a list of abilities or actions that you want to use in order. Rotation Cue shows what comes next. It can watch abilities on your action bars and move to the next cue after you use one.
 
-## What It Does
+Rotation Cue is only a visual aid. It does not press keys or play the game for you.
 
-* Shows the current ability in your rotation.
-* Reads cooldown text from your mapped action bar slots.
-* Lets you build Melee, Magic, Ranged, Necromancy, and Hybrid rotations.
-* Lets you add reminder steps like items, prayers, and cue markers.
-* Can show a larger cue icon anywhere you place it.
-* Can scan your action bars during setup to help map abilities.
+## What Rotation Cue Can Do
 
+- Build Melee, Magic, Ranged, Necromancy, and Hybrid rotations.
+- Add abilities, spells, aspects, prayers, items, and cue markers.
+- Show the next cue in a floating overlay.
+- Highlight the current ability on your RuneScape action bar.
+- Move to the next cue after an ability is used.
+- Loop back to the start when a rotation ends.
+- Export and import rotations to share them.
 
+## Before You Start
 
-## Add APP:
+Open RuneScape and make sure the action bars you use are visible. Do not cover them with another window.
 
-alt1://addapp/https://plaguedplatypus.github.io/PlaguesRotationCue/appconfig.json
+Open Rotation Cue inside Alt1. You can build and edit rotations in a normal browser, but action-bar scanning and automatic cue changes need Alt1.
 
+## Make a Rotation
 
+1. Pick a combat style at the top of the app.
+2. Select **Add New Rotation**.
+3. Give the rotation a name.
+4. Select **+ Add Ability** to add an empty step.
+5. Select the empty square to open the picker.
+6. Choose a section, then select the ability or action you want.
+7. Repeat these steps until the rotation is finished.
 
-## Quick Setup
+Use the search box when you know the name of what you want. The small section icons let you view abilities, spells, aspects, defensive abilities, utility abilities, prayers, items, or cue markers.
 
-1. Open the **Action Bar** tab.
-2. Pick your bar size.
-3. Click **Add Bar**.
-4. Hover over the center of slot 1 on your RuneScape action bar.
-5. Press **Alt+1**.
-6. Click **Show Boxes** and make sure the green box covers the cooldown text area.
-7. Use the arrow buttons if the boxes need a small move.
-8. Click **Set 0** when it looks right.
+You can drag steps to put them in a new order. You can also remove a step with its small **X** button.
 
-## Make A Rotation
+## Start a Rotation
 
-1. Open the **Rotation** tab.
-2. Pick a combat style.
-3. Click **Add New Rotation**.
-4. Click **+ Add Ability**.
-5. Click a square to choose an ability.
-6. Shift-click a square for items, prayers, and markers.
-7. Click **Scan** to help map the abilities on your bars.
-8. Click **Activate** when you want to use the rotation.
+Select **Activate** beside the rotation you want to use.
 
-If Scan misses something, open **Map Abilities** in settings and fix the slot by hand.
+Rotation Cue will quietly scan your visible action bars. The current step will appear in the floating cue overlay. If that ability is on an action bar, it will also be outlined on the bar.
 
-## Step Types
+When you use the ability, Rotation Cue will move to the next step. By default, the rotation starts again after the last step.
 
-**Tracked**
-A normal ability that is mapped to an action bar slot. The app can watch its cooldown text.
+Select **Deactivate** when you want to stop using the rotation.
 
-**Untracked**
-A visual step. It can appear in your rotation, but it does not control cooldown tracking.
+## Move to the Next Cue by Hand
 
-**Reminder**
-A step that reminds you to do something, like use an item or prayer.
+Press **Alt+1** to move to the next cue.
 
-**Cue Marker**
-A visual stop or note in the rotation. Current markers are:
+This is useful for prayers, some items, cue markers, or any step that cannot be watched automatically.
 
-* Phase
-* Wait
-* Move
+## Cue Markers
 
-Cue markers do not auto-advance. Use the skip arrows to advance.
+Cue markers are reminders inside a rotation:
 
-## Large Cue
+- **Phase** reminds you that a new fight phase has started.
+- **Wait** reminds you to pause.
+- **Move** reminds you to change position.
 
-Large Cue shows the current cue as a bigger icon.
+Cue markers do not move forward by themselves. Press **Alt+1** when you are ready for the next cue.
 
-Turn it on in Settings, click **Set Large Cue Position**, then press **Alt+1** where you want it on screen.
+## Change the Cue Overlay
 
-Large Cue follows the same rotation cue as the normal action bar overlay.
+Open Settings with the three-dot button in the top-right corner.
 
-You can go back or skip the current Large rotation cue by hovering over the small arrows and pressing Alt+1.
+The **Cue Overlay** section lets you:
 
-## Large Cue Keybinds - VISUAL AID ONLY -
+- Show or hide the large floating cue.
+- Move the cue to another place on your screen.
+- Make the cue larger or smaller.
+- Choose how many upcoming abilities are shown.
+- Change the current cue's border size and color.
+- Use 50% icon opacity.
+- Show or hide ability names.
+- Show or hide the NEXT label.
 
-Large Cue can show keybind labels.
+To move the overlay, select **Reposition Overlay**, move the preview where you want it, and press **Alt+1**. The position will be saved.
 
-Open Settings, click **Large Cue Keybinds**, then TYPE the label you want to see for each slot. The app does not record/use keybinds.
+Hiding the large cue does not hide the outline on your RuneScape action bar. You can use either cue style or both.
 
-Short labels work best. Shift+Q -> s-Q
+## Automation Settings
 
-## Sharing Rotations
+**Auto-advance rotation** lets Rotation Cue move forward after it sees an ability being used.
 
-* Rotation **Export** and **Import** to sharee a rotation.
+**Loop rotation at end** sends the cue back to the first step after the last step.
 
+Both settings are on when you first use the app.
+
+## Save and Share Rotations
+
+Your rotations are saved automatically.
+
+Select **Export** to save a rotation file for sharing. Select **Import** to open a rotation file that someone shared with you.
+
+## If Something Is Not Working
+
+- Make sure the needed action bar is visible.
+- Make sure no other window covers the action bar.
+- Select **Scan** when your action bars have moved or an ability was not found.
+- Try scanning while your abilities are ready and not darkened by cooldowns.
+- Use **Alt+1** for steps that do not move forward automatically.
+- Turn on **Diagnostics** in Settings if you need to see what the app found.
+
+## Patch Notes
+
+Open Settings and select **Patch Notes** to see what changed in each version.
