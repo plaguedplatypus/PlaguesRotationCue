@@ -1,6 +1,6 @@
 {
-  "name": "rotation-cue-clean",
-  "version": "0.2.0",
+  "name": "rotation-cue",
+  "version": "1.0.0",
   "private": true,
   "description": "A small, browser-testable Alt1 rotation cue player.",
   "scripts": {
