@@ -66,7 +66,9 @@ button {
   min-height: 0;
   margin: 0;
   padding: 0;
-  background: url("./assets/bg.png") center / cover no-repeat;
+  background: 
+        linear-gradient(rgba(5, 15, 20, 0.25), rgba(0, 102, 128, 0.15)),
+        url("./assets/bg.png") center / cover no-repeat;
 }
 
 button,
@@ -517,6 +519,21 @@ button:disabled {
 
 .rotation-editor {
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rotation-library-controls {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-top: 5px;
+  background: rgba(5, 12, 15, .58);
+}
+
+.rotation-library-scroll {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -527,7 +544,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
-  margin-bottom: 6px;
+  margin: 0 8px 6px;
 }
 
 .combat-tabs button {
@@ -551,10 +568,10 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 30px;
-  margin-bottom: 5px;
-  padding: 2px 4px 2px 7px;
-  border: 1px solid var(--gold-dark);
-  border-radius: 3px;
+  padding: 2px 8px;
+  border: 0;
+  border-top: 1px solid var(--gold-dark);
+  border-bottom: 1px solid var(--gold-dark);
   background: linear-gradient(#3d2d16, #21170c);
   color: #fff1bd;
 }
@@ -649,6 +666,26 @@ button:disabled {
 .rotation-card.is-active .rotation-card-heading {
   border-bottom-color: #376575;
   background: linear-gradient(#1b2d34, #132228);
+}
+
+.rotation-collapsed-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 3px;
+  margin: 4px -3px -3px;
+}
+
+.rotation-collapsed-controls button {
+  width: 100%;
+  min-height: 22px;
+  height: 22px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+.rotation-collapsed-controls .icon-button {
+  width: 28px;
+  min-width: 28px;
 }
 
 .rotation-card-heading>.icon-button:nth-child(2),
@@ -1180,7 +1217,7 @@ h3 {
 }
 
 .settings-modal-body,
-.rotation-editor,
+.rotation-library-scroll,
 .ability-results,
 .diagnostics-panel[open],
 .detected-list {

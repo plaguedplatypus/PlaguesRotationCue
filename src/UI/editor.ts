@@ -42,6 +42,9 @@ export function renderEditor(
 ): void {
   container.replaceChildren();
 
+  const libraryControls = document.createElement("section");
+  libraryControls.className = "rotation-library-controls";
+
   const tabs = document.createElement("nav");
   tabs.className = "combat-tabs";
   tabs.setAttribute("aria-label", "Rotation category");
@@ -60,18 +63,22 @@ export function renderEditor(
   title.innerHTML = `<strong>Rotation library</strong><small>${categoryLabels[state.selectedCategory]}</small>`;
   const addRotation = document.createElement("button");
   addRotation.type = "button";
-  addRotation.className = "compact-button is-primary";
+  addRotation.className = "compact-button";
   addRotation.textContent = "Add New Rotation";
   addRotation.addEventListener("click", () => state.createRotation());
   libraryHeader.append(title, addRotation);
 
-  container.append(tabs, libraryHeader);
+  libraryControls.append(tabs, libraryHeader);
+
+  const rotationList = document.createElement("div");
+  rotationList.className = "rotation-library-scroll";
+  container.append(libraryControls, rotationList);
 
   if (transferMessage) {
     const message = document.createElement("p");
     message.className = "transfer-message";
     message.textContent = transferMessage;
-    container.append(message);
+    rotationList.append(message);
   }
 
   const categoryRotations = state.rotations.filter((rotation) => rotation.category === state.selectedCategory);
@@ -79,11 +86,11 @@ export function renderEditor(
     const empty = document.createElement("div");
     empty.className = "rotation-library-empty";
     empty.textContent = `No ${categoryLabels[state.selectedCategory]} rotations yet.`;
-    container.append(empty);
+    rotationList.append(empty);
   }
 
   categoryRotations.forEach((rotation, index) => {
-    container.append(renderRotationCard(rotation, index, categoryRotations.length, state, context));
+    rotationList.append(renderRotationCard(rotation, index, categoryRotations.length, state, context));
   });
 }
 
@@ -105,7 +112,7 @@ function renderRotationCard(
     if (collapsed) collapsedRotations.delete(rotation.id);
     else collapsedRotations.add(rotation.id);
     saveCollapsedRotationIds(collapsedRotations);
-    renderEditor(card.parentElement as HTMLElement, state, context);
+    renderEditor(card.closest(".rotation-editor") as HTMLElement, state, context);
   });
   const up = iconButton("↑", "Move rotation up", () => state.moveRotation(rotation.id, -1));
   const down = iconButton("↓", "Move rotation down", () => state.moveRotation(rotation.id, 1));
@@ -136,7 +143,20 @@ function renderRotationCard(
   remove.classList.add("is-danger");
   header.append(collapse, up, down, name, activate, remove);
   card.append(header);
-  if (collapsed) return card;
+  if (collapsed) {
+    if (active) {
+      const controls = document.createElement("div");
+      controls.className = "rotation-collapsed-controls";
+      const previous = smallTextButton("← Previous", context.onPrevious);
+      previous.title = "Previous cue";
+      const reset = iconButton("↺", "Reset cue", context.onReset);
+      const next = smallTextButton("Next →", context.onNext);
+      next.title = "Next cue";
+      controls.append(previous, reset, next);
+      card.append(controls);
+    }
+    return card;
+  }
 
   const meta = document.createElement("div");
   meta.className = "rotation-meta";
