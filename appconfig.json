@@ -7,7 +7,7 @@
   "defaultWidth": 760,
   "defaultHeight": 760,
   "minWidth": 360,
-  "minHeight": 198,
+  "minHeight": 199,
   "requestHandlers": [],
   "activators": [],
   "permissions": "pixel,overlay"

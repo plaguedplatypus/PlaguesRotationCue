@@ -14,7 +14,7 @@
   --green: #59c878;
   --red: #eb6b6b;
   --text: #f1f1f1;
-  --muted: #aeb1ad;
+  --muted: #cfcfcf;
   --rotation-cue-background: none;
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
   font-size: 12px;
@@ -67,7 +67,7 @@ button {
   margin: 0;
   padding: 0;
   background: 
-        linear-gradient(rgba(5, 15, 20, 0.25), rgba(0, 102, 128, 0.15)),
+        linear-gradient(rgba(5, 15, 20, 0.65), rgba(0, 102, 128, 0.08)),
         url("./assets/bg.png") center / cover no-repeat;
 }
 
@@ -276,7 +276,7 @@ button:disabled {
 .settings-range-row,
 .settings-keybind-row {
   min-height: 31px;
-  border: 1px solid #443820;
+  border: 1px solid var(--gold-dark);
   border-radius: 5px;
   background: rgba(27, 30, 24, 0.64);
 }
@@ -371,7 +371,7 @@ button:disabled {
 }
 
 .settings-range-row output {
-  color: var(--muted);
+  color: var(--text);
   font-size: 12px;
 }
 
@@ -573,6 +573,7 @@ button:disabled {
   border-top: 1px solid var(--gold-dark);
   border-bottom: 1px solid var(--gold-dark);
   background: linear-gradient(#3d2d16, #21170c);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, .90);
   color: #fff1bd;
 }
 
@@ -634,11 +635,12 @@ button:disabled {
   min-width: 0;
   margin: 0 0 5px;
   padding: 0 7px 7px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--gold-dark);
+  border: 1px solid var(--gold-dark);
+  border-left: 4px solid var(--gold-dark);
   border-radius: 4px;
   background: rgba(19, 40, 51, 0.75);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, .38);
+  box-shadow: 0 3px 3px rgba(0, 0, 0, .90);
+  
 }
 
 .rotation-card:hover {
@@ -659,8 +661,8 @@ button:disabled {
   min-width: 0;
   margin: 0 -7px;
   padding: 2px 7px;
-  border-bottom: 1px solid #3a3328;
-  background: linear-gradient(#252525, #1b1d1e);
+  border-bottom: 1px solid var(--gold-dark);
+  background: rgba(27, 30, 24, 0.8);
 }
 
 .rotation-card.is-active .rotation-card-heading {
@@ -704,7 +706,7 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 3px;
   background: var(--surface-input);
-  color: var(--text);
+  color: var(--muted);
   font-weight: 700;
 }
 
@@ -715,7 +717,7 @@ button:disabled {
   gap: 4px;
   min-width: 0;
   padding-top: 4px;
-  color: var(--muted);
+  color: var(--text);
 }
 
 .rotation-meta>span {
@@ -745,7 +747,7 @@ button:disabled {
 
 .rotation-hint {
   margin: 4px 0 3px;
-  color: var(--muted);
+  color: var(--text);
   line-height: 15px;
 }
 
