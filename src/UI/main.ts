@@ -20,6 +20,7 @@ const EXPECTED_POLL_MS = 250;
 const OVERLAY_KEEPALIVE_MS = 5_000;
 const DIAGNOSTICS_REFRESH_MS = 500;
 const TRACKING_RECOVERY_RETRY_MS = 30_000;
+const TRANSFER_MESSAGE_MS = 4_000;
 
 export function mountApp(root: HTMLElement, state: AppState): void {
   const engine = new RotationEngine();
@@ -42,6 +43,8 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   let overlayPlacementActive = false;
   let overlayPlacementTimer: number | null = null;
   let overlayPlacementListener: ((event: a1lib.Alt1EventType["alt1pressed"]) => void) | null = null;
+  let footerMessage = "";
+  let footerMessageTimer: number | null = null;
   engine.setRotation(state.activeRotation);
   alt1Overlay.setPosition(settings.overlayPosition);
   alt1Overlay.setScale(settings.cueScale);
@@ -52,6 +55,27 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   alt1Overlay.setShowNextLabel(settings.showNextLabel);
 
   const upcomingCues = (count: number) => engine.getUpcomingSteps(count, settings.loopRotationAtEnd);
+
+  const updateFooterStatus = (): void => {
+    const footer = root.querySelector<HTMLElement>(".app-footer");
+    const text = footer?.querySelector<HTMLElement>("span");
+    if (!footer || !text) return;
+    footer.classList.toggle("has-message", !!footerMessage);
+    text.textContent = footerMessage || (state.activeRotation
+      ? `Active: ${state.activeRotation.name}`
+      : "No active rotation");
+  };
+
+  const showTransferMessage = (message: string): void => {
+    footerMessage = message;
+    if (footerMessageTimer !== null) window.clearTimeout(footerMessageTimer);
+    updateFooterStatus();
+    footerMessageTimer = window.setTimeout(() => {
+      footerMessage = "";
+      footerMessageTimer = null;
+      updateFooterStatus();
+    }, TRANSFER_MESSAGE_MS);
+  };
 
   const redrawActionBarCue = (): void => {
     const abilityId = engine.getCurrentStep()?.abilityId;
@@ -362,7 +386,9 @@ export function mountApp(root: HTMLElement, state: AppState): void {
         open: diagnosticsOpen,
         visible: settings.showDiagnostics
       })}
-      <footer class="app-footer"><span>${state.activeRotation ? `Active: ${escapeHtml(state.activeRotation.name)}` : "No active rotation"}</span></footer>
+      <footer class="app-footer${footerMessage ? " has-message" : ""}"><span>${footerMessage
+        ? escapeHtml(footerMessage)
+        : state.activeRotation ? `Active: ${escapeHtml(state.activeRotation.name)}` : "No active rotation"}</span></footer>
       ${settingsOpen ? settingsModalMarkup(settings, overlayPlacementActive) : ""}
     `;
 
@@ -373,7 +399,8 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       onScan: () => { void runFullScan(); },
       onPrevious: previousCue,
       onNext: nextCue,
-      onReset: resetCue
+      onReset: resetCue,
+      onTransferMessage: showTransferMessage
     });
     const overlayCues = upcomingCues(settings.upcomingAbilities);
     if (!settings.showCueOverlay) alt1Overlay.clear();
@@ -533,6 +560,7 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     alt1Overlay.clear();
     actionBarCueOverlay.clear();
     window.clearInterval(overlayKeepaliveTimer);
+    if (footerMessageTimer !== null) window.clearTimeout(footerMessageTimer);
   };
   window.addEventListener("pagehide", clearOverlayForShutdown);
   window.addEventListener("beforeunload", clearOverlayForShutdown);

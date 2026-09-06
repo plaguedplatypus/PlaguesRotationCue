@@ -23,7 +23,6 @@ const categoryLabels: Record<RotationCategory, string> = {
 
 const collapsedRotations = new Set(loadCollapsedRotationIds());
 let picker: { rotationId: string; replaceIndex: number | null } | null = null;
-let transferMessage = "";
 
 export type RotationEditorContext = {
   currentIndex: number;
@@ -33,6 +32,7 @@ export type RotationEditorContext = {
   onPrevious: () => void;
   onNext: () => void;
   onReset: () => void;
+  onTransferMessage: (message: string) => void;
 };
 
 export function renderEditor(
@@ -73,13 +73,6 @@ export function renderEditor(
   const rotationList = document.createElement("div");
   rotationList.className = "rotation-library-scroll";
   container.append(libraryControls, rotationList);
-
-  if (transferMessage) {
-    const message = document.createElement("p");
-    message.className = "transfer-message";
-    message.textContent = transferMessage;
-    rotationList.append(message);
-  }
 
   const categoryRotations = state.rotations.filter((rotation) => rotation.category === state.selectedCategory);
   if (!categoryRotations.length) {
@@ -167,7 +160,11 @@ function renderRotationCard(
   const scan = smallTextButton(context.scanInProgress ? "Scanning…" : "Scan", context.onScan);
   scan.classList.add("rotation-scan-button");
   scan.disabled = !context.canScan || context.scanInProgress;
-  actions.append(scan, smallTextButton("Export", () => exportRotation(rotation)), smallTextButton("Import", () => importRotation(state)));
+  actions.append(
+    scan,
+    smallTextButton("Export", () => exportRotation(rotation, context.onTransferMessage)),
+    smallTextButton("Import", () => importRotation(state, context.onTransferMessage))
+  );
   if (active) {
     const recovery = document.createElement("div");
     recovery.className = "rotation-recovery-controls";
@@ -376,7 +373,7 @@ function abilityOption(entry: RotationCatalogEntry, action: () => void): HTMLBut
   return button;
 }
 
-function exportRotation(rotation: Rotation): void {
+function exportRotation(rotation: Rotation, showMessage: (message: string) => void): void {
   const blob = new Blob([serializeRotation(rotation)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -384,10 +381,10 @@ function exportRotation(rotation: Rotation): void {
   link.download = `${safeFileName(rotation.name)}.rotation.json`;
   link.click();
   URL.revokeObjectURL(url);
-  transferMessage = `Exported “${rotation.name}”.`;
+  showMessage(`Exported “${rotation.name}”.`);
 }
 
-function importRotation(state: AppState): void {
+function importRotation(state: AppState, showMessage: (message: string) => void): void {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".json,application/json";
@@ -397,14 +394,13 @@ function importRotation(state: AppState): void {
     try {
       const rotation = parseRotationTransfer(await file.text());
       const existing = state.rotations.some((candidate) => candidate.id === rotation.id);
-      transferMessage = existing
+      showMessage(existing
         ? `Updated “${rotation.name}” from its matching ID.`
-        : `Imported “${rotation.name}”.`;
+        : `Imported “${rotation.name}”.`);
       state.importRotation(rotation);
     } catch (error) {
       const message = error instanceof Error ? error.message : "The rotation could not be imported.";
-      transferMessage = message;
-      window.alert(message);
+      showMessage(message);
     }
   });
   input.click();
