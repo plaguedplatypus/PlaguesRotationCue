@@ -18,6 +18,13 @@ Rotation Cue is only a visual aid. It does not press keys or play the game for y
 
 ## Before You Start
 
+- Add APP:
+alt1://addapp/https://plaguedplatypus.github.io/PlaguesRotationCue/appconfig.json
+
+Requirements:
+- Cooldown timer must be enabled and on the Top Right.
+- Interface scaling must be at 100%.
+
 Open RuneScape and make sure the action bars you use are visible. Do not cover them with another window.
 
 Open Rotation Cue inside Alt1. You can build and edit rotations in a normal browser, but action-bar scanning and automatic cue changes need Alt1.
