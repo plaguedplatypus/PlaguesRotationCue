@@ -6,7 +6,7 @@
   place-items: center;
   padding: 14px;
   background: rgba(0, 0, 0, .5);
-  backdrop-filter: blur(1px);
+  backdrop-filter: blur(2px);
 }
 
 .settings-modal {

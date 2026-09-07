@@ -25,6 +25,7 @@ export class Alt1CueOverlay {
   private showNextLabel = true;
   private visualKeybinds: VisualKeybinds = {};
   private autoAdvance = true;
+  private currentCooldown: { abilityId: string; seconds: number } | null = null;
   private placementDrawInProgress = false;
 
   async draw(cues: CueItem[]): Promise<void> {
@@ -109,6 +110,21 @@ export class Alt1CueOverlay {
     this.lastDrawAt = 0;
   }
 
+  setCurrentCooldown(abilityId: string | null, seconds?: number): boolean {
+    const hasActiveCooldown = typeof seconds === "number"
+      && Number.isFinite(seconds)
+      && seconds > 0;
+    const next = abilityId && hasActiveCooldown
+      ? { abilityId, seconds: Math.round(seconds) }
+      : null;
+    if (this.currentCooldown?.abilityId === next?.abilityId
+      && this.currentCooldown?.seconds === next?.seconds) return false;
+    this.currentCooldown = next;
+    this.lastSignature = "";
+    this.lastDrawAt = 0;
+    return true;
+  }
+
   private async drawAt(cues: CueItem[], position: ScreenPoint | null, placementPreview: boolean): Promise<void> {
     if (!isAlt1Available()) return;
     if (!cues.length && !placementPreview) {
@@ -120,7 +136,10 @@ export class Alt1CueOverlay {
     const visualSequence = cues.map((cue) => cue.offset === 0
       ? cueKeybindSequence(cue.step.abilityId, this.visualKeybinds, this.autoAdvance).join("+")
       : "").join("|");
-    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showAbilityNames}:${this.showNextLabel}:${visualSequence}`;
+    const cooldownSignature = this.currentCooldown
+      ? `${this.currentCooldown.abilityId}:${this.currentCooldown.seconds}`
+      : "ready";
+    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showAbilityNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}`;
     if (!placementPreview && signature === this.lastSignature
       && Date.now() - this.lastDrawAt < OVERLAY_REFRESH_MS) return;
 
@@ -128,7 +147,8 @@ export class Alt1CueOverlay {
     const tileWidth = 72;
     const gap = 5;
     const frameSize = 60;
-    const iconSize = 54;
+    const frameInset = 3;
+    const backgroundBorder = 1;
     const currentCue = cues.find((cue) => cue.offset === 0);
     const currentKeybinds = currentCue && this.showNextLabel
       ? cueKeybindSequence(currentCue.step.abilityId, this.visualKeybinds, this.autoAdvance)
@@ -149,7 +169,7 @@ export class Alt1CueOverlay {
     const logicalHeight = tileHeight;
     canvas.width = Math.max(1, Math.round(logicalWidth * this.scale));
     canvas.height = Math.max(1, Math.round(logicalHeight * this.scale));
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return;
 
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -163,22 +183,38 @@ export class Alt1CueOverlay {
       const ability = rotationEntryById.get(cue.step.abilityId);
       const x = visualGutter + index * (tileWidth + gap);
       const current = cue.offset === 0;
-      const frameX = x + Math.round((tileWidth - frameSize) / 2);
+      const cueFrameSize = Math.round(frameSize * cueScale(cue.offset));
+      const cueIconSize = cueFrameSize - frameInset * 2;
+      const frameX = x + Math.round((tileWidth - cueFrameSize) / 2);
+      const cueFrameY = frameY + frameSize - cueFrameSize;
 
       context.fillStyle = "rgba(13, 17, 23, 0.94)";
-      context.fillRect(frameX + 3, frameY + 3, iconSize, iconSize);
+      context.fillRect(
+        frameX + frameInset - backgroundBorder,
+        cueFrameY + frameInset - backgroundBorder,
+        cueIconSize + backgroundBorder * 2,
+        cueIconSize + backgroundBorder * 2
+      );
       const icon = loadedIcons[index];
-      if (icon) context.drawImage(icon, frameX + 3, frameY + 3, iconSize, iconSize);
+      if (icon) {
+        context.drawImage(
+          icon,
+          frameX + frameInset,
+          cueFrameY + frameInset,
+          cueIconSize,
+          cueIconSize
+        );
+      }
       const borderThickness = current ? this.borderThickness : 0;
       if (borderThickness > 0) {
         context.strokeStyle = this.borderColor;
         context.lineWidth = borderThickness;
         const borderOffset = borderThickness / 2;
         context.strokeRect(
-          frameX + 3 - borderOffset,
-          frameY + 3 - borderOffset,
-          iconSize + borderThickness,
-          iconSize + borderThickness
+          frameX + frameInset - borderOffset,
+          cueFrameY + frameInset - borderOffset,
+          cueIconSize + borderThickness,
+          cueIconSize + borderThickness
         );
       }
 
@@ -196,7 +232,7 @@ export class Alt1CueOverlay {
       }
 
       if (index > 0) {
-        drawCueArrow(context, x - gap / 2, frameY + frameSize / 2);
+        drawCueArrow(context, x - gap / 2, cueFrameY + cueFrameSize / 2);
       }
 
       if (this.showAbilityNames) {
@@ -235,12 +271,38 @@ export class Alt1CueOverlay {
       if (canContinue) alt1.overLayFreezeGroup(GROUP_NAME);
       alt1.overLayClearGroup(GROUP_NAME);
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const iconOpacityRegions = cues.map((_cue, index) => {
-        const frameX = visualGutter + index * (tileWidth + gap) + Math.round((tileWidth - frameSize) / 2);
-        return scaledRegion(frameX + 3, frameY + 3, iconSize, iconSize, this.scale);
+      const iconOpacityRegions = cues.map((cue, index) => {
+        const cueFrameSize = Math.round(frameSize * cueScale(cue.offset));
+        const cueIconSize = cueFrameSize - frameInset * 2;
+        const frameX = visualGutter + index * (tileWidth + gap)
+          + Math.round((tileWidth - cueFrameSize) / 2);
+        const cueFrameY = frameY + frameSize - cueFrameSize;
+        return scaledRegion(
+          frameX + frameInset,
+          cueFrameY + frameInset,
+          cueIconSize,
+          cueIconSize,
+          this.scale
+        );
       });
       applyOverlayOpacity(imageData, this.opacity, iconOpacityRegions);
-      const encoded = encodeImageString(imageData);
+      context.putImageData(imageData, 0, 0);
+      const currentIndex = cues.findIndex((cue) => cue.offset === 0);
+      const currentAbilityId = currentIndex >= 0 ? cues[currentIndex].step.abilityId : null;
+      if (currentIndex >= 0 && this.currentCooldown?.abilityId === currentAbilityId) {
+        const currentFrameSize = Math.round(frameSize * cueScale(cues[currentIndex].offset));
+        const currentIconSize = currentFrameSize - frameInset * 2;
+        const frameX = visualGutter + currentIndex * (tileWidth + gap)
+          + Math.round((tileWidth - currentFrameSize) / 2);
+        const currentFrameY = frameY + frameSize - currentFrameSize;
+        drawCooldownNumber(
+          context,
+          frameX + frameInset + currentIconSize / 2,
+          currentFrameY + frameInset + currentIconSize / 2,
+          String(this.currentCooldown.seconds)
+        );
+      }
+      const encoded = encodeImageString(context.getImageData(0, 0, canvas.width, canvas.height));
       const rsWidth = Number(alt1.rsWidth);
       const rsHeight = Number(alt1.rsHeight);
       const defaultX = Math.max(8, Math.round((rsWidth - canvas.width) / 2));
@@ -302,22 +364,26 @@ function clampCoordinate(value: number, maximum: number): number {
   return Math.max(0, Math.min(value, Math.max(0, maximum)));
 }
 
-function drawCueArrow(context: CanvasRenderingContext2D, centerX: number, centerY: number): void {
-  context.fillStyle = "rgba(13, 17, 23, 0.94)";
-  context.fillRect(centerX - 6, centerY - 8, 12, 16);
-  context.strokeStyle = "#485260";
-  context.lineWidth = 1;
-  context.strokeRect(centerX - 5.5, centerY - 7.5, 11, 15);
+function cueScale(offset: number): number {
+  if (offset <= 0) return 1;
+  return 0.85;
+}
 
+function drawCueArrow(context: CanvasRenderingContext2D, centerX: number, centerY: number): void {
+  context.save();
   context.beginPath();
   context.moveTo(centerX - 2.5, centerY - 4);
   context.lineTo(centerX + 2, centerY);
   context.lineTo(centerX - 2.5, centerY + 4);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "#0d1117";
+  context.lineWidth = 4;
+  context.stroke();
   context.strokeStyle = "#f2c94c";
   context.lineWidth = 2;
-  context.lineCap = "square";
-  context.lineJoin = "miter";
   context.stroke();
+  context.restore();
 }
 
 function measureKeybindSequence(context: CanvasRenderingContext2D, keybinds: string[]): number {
@@ -369,6 +435,25 @@ function drawKeybindSequence(
       x += 9;
     }
   });
+}
+
+function drawCooldownNumber(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  value: string
+): void {
+  context.save();
+  context.font = "bold 22px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.lineJoin = "round";
+  context.strokeStyle = "rgba(0, 0, 0, 0.95)";
+  context.lineWidth = 4;
+  context.strokeText(value, centerX, centerY);
+  context.fillStyle = "#ffffff";
+  context.fillText(value, centerX, centerY);
+  context.restore();
 }
 
 const OPACITY_BAYER_8X8 = [

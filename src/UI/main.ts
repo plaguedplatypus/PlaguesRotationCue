@@ -106,6 +106,7 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   const resetExpectedTracking = (): void => {
     abilityReader.resetExpectedTracking();
     trackingObservation = null;
+    alt1Overlay.setCurrentCooldown(null);
   };
 
   const stopExpectedTracking = (): void => {
@@ -222,9 +223,14 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     trackingInProgress = true;
     let recoverAfterPoll = false;
     let cueUiUpdateRequired = false;
+    let overlayCooldownChanged = false;
     try {
       const observation = await abilityReader.observeExpectedAbility(abilityId);
       trackingObservation = observation;
+      overlayCooldownChanged = alt1Overlay.setCurrentCooldown(
+        observation.cooldownSeconds !== undefined ? observation.abilityId : null,
+        observation.cooldownSeconds
+      );
       if (observation.state === "identity-lost" || !observation.slotFound) {
         trackingEnabled = false;
         if (trackingTimer !== null) window.clearInterval(trackingTimer);
@@ -245,7 +251,12 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     } finally {
       trackingInProgress = false;
       if (cueUiUpdateRequired) updateRuntimeCueUi();
-      else refreshDiagnosticsPanel();
+      else {
+        if (overlayCooldownChanged && settings.showCueOverlay && !overlayPlacementActive) {
+          void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+        }
+        refreshDiagnosticsPanel();
+      }
       if (recoverAfterPoll) scheduleTrackingRecovery();
     }
   };
