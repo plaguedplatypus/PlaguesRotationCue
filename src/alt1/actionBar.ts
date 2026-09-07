@@ -216,10 +216,10 @@ export class CurrentActionBarCueOverlay {
       api.overLayClearGroup(CURRENT_CUE_GROUP);
       api.overLayRect(
         hexOverlayColor(color),
-        location.x,
-        location.y,
-        location.width,
-        location.height,
+        location.x - thickness,
+        location.y - thickness,
+        location.width + thickness * 2,
+        location.height + thickness * 2,
         CURRENT_CUE_LIFETIME_MS,
         thickness
       );

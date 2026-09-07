@@ -132,7 +132,7 @@ export class Alt1CueOverlay {
       const current = cue.offset === 0;
       const frameX = x + Math.round((tileWidth - frameSize) / 2);
 
-      context.fillStyle = "rgba(13, 17, 23, 0.94)";
+      context.fillStyle = "rgba(13, 17, 23, 0.64)";
       context.fillRect(frameX + 3, frameY + 3, iconSize, iconSize);
       const icon = loadedIcons[index];
       if (icon) context.drawImage(icon, frameX + 3, frameY + 3, iconSize, iconSize);
@@ -140,11 +140,12 @@ export class Alt1CueOverlay {
       if (borderThickness > 0) {
         context.strokeStyle = this.borderColor;
         context.lineWidth = borderThickness;
+        const borderOffset = borderThickness / 2;
         context.strokeRect(
-          frameX + 3,
-          frameY + 3,
-          iconSize,
-          iconSize
+          frameX + 3 - borderOffset,
+          frameY + 3 - borderOffset,
+          iconSize + borderThickness,
+          iconSize + borderThickness
         );
       }
 
