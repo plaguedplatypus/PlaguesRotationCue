@@ -245,6 +245,138 @@ button:disabled {
   overflow-y: auto;
 }
 
+.visual-keybind-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 35px;
+  padding: 5px 8px;
+  border-bottom: 1px solid #4b4129;
+  background: rgba(0, 0, 0, .42);
+  color: #d8c58a;
+  font-size: 11px;
+}
+
+.visual-keybind-modal {
+  height: calc(100vh - 28px);
+}
+
+.visual-keybind-help {
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid #414238;
+  background: rgba(14, 19, 18, .78);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.visual-keybind-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 6px 7px 0;
+  border-bottom: 1px solid #4b4129;
+  background: rgba(0, 0, 0, .35);
+}
+
+.visual-keybind-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 27px;
+  padding: 2px 3px;
+  border-color: #56533e;
+  border-radius: 4px 4px 0 0;
+  color: #c7b98e;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.visual-keybind-tab.is-active {
+  border-color: var(--gold);
+  border-bottom-color: #151b1a;
+  background: #151b1a;
+  color: #fff1bd;
+}
+
+.visual-keybind-body {
+  display: block;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.visual-keybind-list {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+}
+
+.visual-keybind-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 3px 5px;
+  border: 1px solid #414238;
+  border-radius: 4px;
+  background: rgba(27, 30, 24, .68);
+}
+
+.visual-keybind-row img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+}
+
+.visual-keybind-ability {
+  display: grid;
+  min-width: 0;
+}
+
+.visual-keybind-ability strong,
+.visual-keybind-ability small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visual-keybind-ability strong {
+  color: #e5e1d5;
+  font-size: 11px;
+}
+
+.visual-keybind-ability small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.visual-keybind-input {
+  min-width: 72px;
+  min-height: 25px;
+  padding: 2px 7px;
+  border-color: #56533e;
+  color: #fff1bd;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.visual-keybind-input.is-listening {
+  border-color: var(--cyan);
+  color: #8eeeff;
+  outline: 1px solid rgba(86, 222, 242, .35);
+}
+
+.visual-keybind-empty {
+  margin: 0;
+  padding: 18px 12px;
+  border: 1px dashed #56533e;
+  border-radius: 5px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 16px;
+}
+
 .settings-section>h3 {
   margin-left: -7px;
   padding: 4px 0 0 3px;

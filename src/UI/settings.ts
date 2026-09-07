@@ -107,7 +107,11 @@ export function settingsModalMarkup(settings: RotationCueSettings, positioningOv
             ${colorRow("Border color", "settings-border-color", settings.cueBorderColor)}
             ${toggleRow("Use 50% overlay opacity", "settings-overlay-opacity", settings.overlayOpacity === 50)}
             ${toggleRow("Show ability names", "settings-show-ability-names", settings.showAbilityNames)}
-            ${toggleRow("Show NEXT Label", "settings-show-next-label", settings.showNextLabel)}
+            ${toggleRow("Show keybind visual", "settings-show-next-label", settings.showNextLabel)}
+            <div class="settings-row">
+              <span class="settings-label">Set Visual Keybinds</span>
+              <button class="settings-action" id="settings-visual-keybinds" type="button">Keybinds</button>
+            </div>
           `)}
 
           ${settingsSection("Interface", `

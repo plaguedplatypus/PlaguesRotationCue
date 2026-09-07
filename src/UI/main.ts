@@ -7,6 +7,12 @@ import type { AppState } from "../state";
 import type { AbilityScanResult, ExpectedAbilityObservation, ScreenPoint } from "../types";
 import { diagnosticsBodyMarkup, diagnosticsPanelMarkup, diagnosticsStatus } from "./diagnostics";
 import { renderEditor } from "./editor";
+import {
+  bindVisualKeybindFields,
+  loadVisualKeybinds,
+  saveVisualKeybinds,
+  visualKeybindModalMarkup
+} from "./keybind";
 import { Alt1CueOverlay, isAlt1Available } from "./overlay";
 import {
   bindSettingsShell,
@@ -38,8 +44,11 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   let lastDiagnosticsRefreshAt = 0;
   let diagnosticsOpen = false;
   let settingsOpen = false;
+  let visualKeybindsOpen = false;
+  let visualKeybindBarIndex = 1;
   let settingsScrollTop = 0;
   let settings = loadSettings();
+  let visualKeybinds = loadVisualKeybinds();
   let overlayPlacementActive = false;
   let overlayPlacementTimer: number | null = null;
   let overlayPlacementListener: ((event: a1lib.Alt1EventType["alt1pressed"]) => void) | null = null;
@@ -53,6 +62,8 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   alt1Overlay.setOpacity(settings.overlayOpacity);
   alt1Overlay.setShowAbilityNames(settings.showAbilityNames);
   alt1Overlay.setShowNextLabel(settings.showNextLabel);
+  alt1Overlay.setVisualKeybinds(visualKeybinds);
+  alt1Overlay.setAutoAdvance(settings.autoAdvanceRotation);
 
   const upcomingCues = (count: number) => engine.getUpcomingSteps(count, settings.loopRotationAtEnd);
 
@@ -161,6 +172,11 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       button.disabled = !isAlt1Available() || scanInProgress;
       button.textContent = scanInProgress ? "Scanning…" : "Scan";
     });
+    const keybindScan = root.querySelector<HTMLButtonElement>("#scan-visual-keybinds");
+    if (keybindScan) {
+      keybindScan.disabled = !isAlt1Available() || scanInProgress;
+      keybindScan.textContent = scanInProgress ? "Scanning…" : "Scan Bars";
+    }
     refreshDiagnosticsPanel(true);
   }
 
@@ -267,6 +283,7 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       refreshDiagnosticsPanel(true);
       if (retryOnMissingExpected) scheduleTrackingRecovery(TRACKING_RECOVERY_RETRY_MS);
     }
+    if (visualKeybindsOpen) render();
   };
 
   const finishManualNavigation = (): void => {
@@ -347,7 +364,9 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   };
 
   const render = (): void => {
-    const currentSettingsBody = root.querySelector<HTMLElement>(".settings-modal-body");
+    const currentSettingsBody = !visualKeybindsOpen
+      ? root.querySelector<HTMLElement>("#settings-backdrop .settings-modal-body")
+      : null;
     if (currentSettingsBody) settingsScrollTop = currentSettingsBody.scrollTop;
 
     const rotationChanged = selectedRotationId !== state.activeRotationId;
@@ -389,7 +408,11 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       <footer class="app-footer${footerMessage ? " has-message" : ""}"><span>${footerMessage
         ? escapeHtml(footerMessage)
         : state.activeRotation ? `Active: ${escapeHtml(state.activeRotation.name)}` : "No active rotation"}</span></footer>
-      ${settingsOpen ? settingsModalMarkup(settings, overlayPlacementActive) : ""}
+      ${settingsOpen
+        ? visualKeybindsOpen
+          ? visualKeybindModalMarkup(scanResult, visualKeybinds, scanInProgress, visualKeybindBarIndex)
+          : settingsModalMarkup(settings, overlayPlacementActive)
+        : ""}
     `;
 
     renderEditor(requiredElement(root, "#rotation-editor"), state, {
@@ -414,23 +437,70 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     root.querySelector("#open-settings")?.addEventListener("click", () => {
       settingsScrollTop = 0;
       settingsOpen = true;
+      visualKeybindsOpen = false;
       render();
       root.querySelector<HTMLButtonElement>("#close-settings")?.focus();
     });
     root.querySelector("#close-settings")?.addEventListener("click", () => {
       settingsOpen = false;
+      visualKeybindsOpen = false;
       render();
     });
     root.querySelector("#settings-backdrop")?.addEventListener("click", (event) => {
       if (event.target !== event.currentTarget) return;
       settingsOpen = false;
+      visualKeybindsOpen = false;
       render();
     });
-    if (settingsOpen) {
+    if (settingsOpen && !visualKeybindsOpen) {
       bindSettingsShell(root);
       root.querySelector("#show-patch-notes")?.addEventListener("click", showPatchNotesModal);
       const settingsBody = root.querySelector<HTMLElement>(".settings-modal-body");
       if (settingsBody) settingsBody.scrollTop = settingsScrollTop;
+      root.querySelector("#settings-visual-keybinds")?.addEventListener("click", () => {
+        visualKeybindsOpen = true;
+        visualKeybindBarIndex = 1;
+        render();
+        root.querySelector<HTMLButtonElement>("#close-visual-keybinds")?.focus();
+      });
+    }
+    if (settingsOpen && visualKeybindsOpen) {
+      const returnToSettings = (): void => {
+        visualKeybindsOpen = false;
+        render();
+        root.querySelector<HTMLButtonElement>("#settings-visual-keybinds")?.focus();
+      };
+      root.querySelector("#close-visual-keybinds")?.addEventListener("click", returnToSettings);
+      root.querySelector("#keybinds-backdrop")?.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) returnToSettings();
+      });
+      root.querySelector("#scan-visual-keybinds")?.addEventListener("click", () => {
+        void runFullScan(false);
+      });
+      root.querySelectorAll<HTMLButtonElement>("[data-keybind-bar-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          visualKeybindBarIndex = Number(button.dataset.keybindBarIndex);
+          render();
+          root.querySelector<HTMLButtonElement>(`#visual-keybind-tab-${visualKeybindBarIndex}`)?.focus();
+        });
+      });
+      bindVisualKeybindFields(root, (abilityId, keybind) => {
+        const next = { ...visualKeybinds };
+        if (keybind) next[abilityId] = keybind;
+        else delete next[abilityId];
+        visualKeybinds = next;
+        saveVisualKeybinds(visualKeybinds);
+        alt1Overlay.setVisualKeybinds(visualKeybinds);
+        root.querySelectorAll<HTMLButtonElement>(".visual-keybind-input[data-ability-id]")
+          .forEach((button) => {
+            if (button.dataset.abilityId !== abilityId) return;
+            button.dataset.value = keybind ?? "";
+            button.textContent = keybind ?? "Unbound";
+          });
+        if (settings.showCueOverlay && !overlayPlacementActive) {
+          void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+        }
+      });
     }
     root.querySelector<HTMLInputElement>("#settings-show-overlay")?.addEventListener("change", (event) => {
       const checked = (event.currentTarget as HTMLInputElement).checked;
@@ -514,6 +584,10 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       const autoAdvanceRotation = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, autoAdvanceRotation };
       saveSettings(settings);
+      alt1Overlay.setAutoAdvance(autoAdvanceRotation);
+      if (settings.showCueOverlay && !overlayPlacementActive) {
+        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      }
       if (!autoAdvanceRotation) {
         stopExpectedTracking();
       } else if (state.activeRotation) {
@@ -549,6 +623,12 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   document.addEventListener("keydown", (event) => {
     if (!settingsOpen || event.code !== "Escape") return;
     event.preventDefault();
+    if (visualKeybindsOpen) {
+      visualKeybindsOpen = false;
+      render();
+      root.querySelector<HTMLButtonElement>("#settings-visual-keybinds")?.focus();
+      return;
+    }
     settingsOpen = false;
     render();
   });
