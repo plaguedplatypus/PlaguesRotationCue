@@ -8,6 +8,7 @@ import type {
 import { abilityById } from "../data/abilities";
 import { IconMatcher, type IconMatch } from "./iconMatcher";
 import {
+  clearActionBarGeometry,
   ModernActionBarLocator,
   showActionBarGeometry,
   type ActionBarSlotLocation,
@@ -58,6 +59,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
       await this.matcher.prepare();
       this.locationsByAbility.clear();
       this.resetExpectedTracking();
+      clearActionBarGeometry();
       const fullCapture = a1lib.captureHoldFullRs();
       if (!fullCapture) {
         return emptyResult("error", "RuneScape could not be captured.", startedAt);

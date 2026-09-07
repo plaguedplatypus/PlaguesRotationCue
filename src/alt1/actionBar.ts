@@ -37,36 +37,42 @@ type LayoutSpec = {
   order: "row" | "column";
   firstFromCog: { x: number; y: number };
   firstFromMainAnchor: { x: number; y: number };
+  controlFromCog: { x: number; y: number };
 };
 
 const SLOT_SIZE = 31 as const;
 const MIN_STRUCTURE_SCORE = 0.86;
 const MAIN_ORIGIN_TOLERANCE = 5;
+const CONTROL_PAIR_TOLERANCE = 1;
 
 const LAYOUTS: readonly LayoutSpec[] = [
   {
     id: "flat", columns: 14, rows: 1, pitchX: 36, pitchY: 0, order: "row",
     firstFromCog: { x: -505, y: -16 },
-    firstFromMainAnchor: { x: -126, y: 35 }
+    firstFromMainAnchor: { x: -126, y: 33 },
+    controlFromCog: { x: -4, y: -17 }
   },
   {
     id: "grid", columns: 7, rows: 2, pitchX: 35, pitchY: 35, order: "row",
     firstFromCog: { x: -243, y: -52 },
-    firstFromMainAnchor: { x: -122, y: 52 }
+    firstFromMainAnchor: { x: -122, y: 52 },
+    controlFromCog: { x: -4, y: -55 }
   },
   {
     id: "tower", columns: 2, rows: 7, pitchX: 35, pitchY: 35, order: "column",
     firstFromCog: { x: -52, y: -243 },
-    firstFromMainAnchor: { x: -71, y: -130 }
+    firstFromMainAnchor: { x: -71, y: -130 },
+    controlFromCog: { x: -58, y: -1 }
   },
   {
     id: "vertical", columns: 1, rows: 14, pitchX: 0, pitchY: 36, order: "column",
     firstFromCog: { x: -16, y: -505 },
-    firstFromMainAnchor: { x: -39, y: -138 }
+    firstFromMainAnchor: { x: -39, y: -138 },
+    controlFromCog: { x: -20, y: -1 }
   }
 ];
 
-type Anchors = { cog: ImageData; mainAdrenaline: ImageData[] };
+type Anchors = { cog: ImageData; control: ImageData; mainAdrenaline: ImageData[] };
 
 export class ModernActionBarLocator {
   private anchorsPromise: Promise<Anchors> | null = null;
@@ -74,68 +80,54 @@ export class ModernActionBarLocator {
   async find(screen: a1lib.ImgRef): Promise<ModernActionBar[]> {
     const anchors = await this.prepare();
     const cogPositions = screen.findSubimage(anchors.cog);
+    const controlPositions = screen.findSubimage(anchors.control);
     const mainPositions = anchors.mainAdrenaline.flatMap((anchor) => screen.findSubimage(anchor));
     const candidates: ModernActionBar[] = [];
 
-    for (const anchor of mainPositions) {
-      let best: ModernActionBar | null = null;
-      for (const layout of LAYOUTS) {
-        const x = anchor.x + layout.firstFromMainAnchor.x;
-        const y = anchor.y + layout.firstFromMainAnchor.y;
-        const slots = createSlots(x, y, layout);
-        if (!slotsFitScreen(screen, slots)) continue;
-        const structuralScore = scoreStructure(screen, slots);
-        if (structuralScore < MIN_STRUCTURE_SCORE) continue;
-        const candidate: ModernActionBar = {
-          id: "",
-          kind: "main",
-          layout: layout.id,
-          x,
-          y,
-          structuralScore,
-          slots
-        };
-        if (!best || candidate.structuralScore > best.structuralScore) best = candidate;
-      }
-      if (!best) continue;
-      const duplicateIndex = candidates.findIndex((candidate) => sameOrigin(candidate, best!));
-      if (duplicateIndex === -1) candidates.push(best);
-      else if (best.structuralScore > candidates[duplicateIndex].structuralScore) {
-        candidates[duplicateIndex] = best;
-      }
-    }
-
     for (const cog of cogPositions) {
+      const mainLayout = LAYOUTS.find((layout) => matchesMainFromCog(cog, layout, mainPositions));
+      if (mainLayout) {
+        const main = createCandidate(screen, cog, mainLayout, false);
+        if (main) {
+          main.kind = "main";
+          if (!candidates.some((candidate) => candidate.kind === "main")) candidates.push(main);
+          continue;
+        }
+      }
+
       let best: ModernActionBar | null = null;
       for (const layout of LAYOUTS) {
-        const x = cog.x + layout.firstFromCog.x;
-        const y = cog.y + layout.firstFromCog.y;
-        const slots = createSlots(x, y, layout);
-        if (!slotsFitScreen(screen, slots)) continue;
-        const structuralScore = scoreStructure(screen, slots);
-        if (structuralScore < MIN_STRUCTURE_SCORE) continue;
-        const candidate: ModernActionBar = {
-          id: "",
-          kind: "secondary",
-          layout: layout.id,
-          x,
-          y,
-          structuralScore,
-          slots
-        };
+        const candidate = createCandidate(screen, cog, layout);
+        if (!candidate) continue;
         if (!best || candidate.structuralScore > best.structuralScore) best = candidate;
       }
-      if (best && !candidates.some((candidate) => sameOrigin(candidate, best!))) candidates.push(best);
+      if (best && !candidates.some((candidate) => sameOrigin(candidate, best!))) {
+        candidates.push(best);
+      }
     }
 
     for (const candidate of candidates) {
+      if (candidate.kind === "main") continue;
       const layout = LAYOUTS.find((entry) => entry.id === candidate.layout)!;
-      candidate.kind = mainPositions.some((anchor) => {
-        const expectedX = anchor.x + layout.firstFromMainAnchor.x;
-        const expectedY = anchor.y + layout.firstFromMainAnchor.y;
-        return Math.abs(candidate.x - expectedX) <= MAIN_ORIGIN_TOLERANCE
-          && Math.abs(candidate.y - expectedY) <= MAIN_ORIGIN_TOLERANCE;
-      }) ? "main" : "secondary";
+      const cog = {
+        x: candidate.x - layout.firstFromCog.x,
+        y: candidate.y - layout.firstFromCog.y
+      };
+      const correctedLayout = LAYOUTS.find((entry) => controlPositions.some((control) =>
+        Math.abs(control.x - (cog.x + entry.controlFromCog.x)) <= CONTROL_PAIR_TOLERANCE
+        && Math.abs(control.y - (cog.y + entry.controlFromCog.y)) <= CONTROL_PAIR_TOLERANCE
+      ));
+      if (correctedLayout) {
+        const corrected = createCandidate(screen, cog, correctedLayout);
+        if (corrected) {
+          candidate.layout = corrected.layout;
+          candidate.x = corrected.x;
+          candidate.y = corrected.y;
+          candidate.structuralScore = corrected.structuralScore;
+          candidate.slots = corrected.slots;
+        }
+      }
+      candidate.kind = "secondary";
     }
 
     candidates.sort((left, right) => {
@@ -152,14 +144,24 @@ export class ModernActionBarLocator {
   private prepare(): Promise<Anchors> {
     this.anchorsPromise ??= Promise.all([
       a1lib.imageDataFromUrl("./assets/anchors/modern-action-bar-cog.png"),
+      a1lib.imageDataFromUrl("./assets/anchors/modern-action-bar-control.png"),
       a1lib.imageDataFromUrl("./assets/anchors/modern-main-adrenaline.png"),
       a1lib.imageDataFromUrl("./assets/anchors/modern-main-adrenaline-sword.png")
-    ]).then(([cog, crossedSwords, singleSword]) => ({
+    ]).then(([cog, control, crossedSwords, singleSword]) => ({
       cog,
+      control,
       mainAdrenaline: [crossedSwords, singleSword]
     }));
     return this.anchorsPromise;
   }
+}
+
+export function clearActionBarGeometry(): void {
+  const api = window.alt1;
+  if (!api) return;
+  api.overLaySetGroup("rotation-cue-action-bars");
+  api.overLayClearGroup("rotation-cue-action-bars");
+  api.overLayRefreshGroup("rotation-cue-action-bars");
 }
 
 export function showActionBarGeometry(bars: readonly ModernActionBar[], durationMs = 12000): void {
@@ -275,6 +277,42 @@ function createSlots(x: number, y: number, layout: LayoutSpec): ModernActionBarS
     });
   }
   return slots;
+}
+
+function createCandidate(
+  screen: a1lib.ImgRef,
+  cog: { x: number; y: number },
+  layout: LayoutSpec,
+  requireStructure = true
+): ModernActionBar | null {
+  const x = cog.x + layout.firstFromCog.x;
+  const y = cog.y + layout.firstFromCog.y;
+  const slots = createSlots(x, y, layout);
+  if (!slotsFitScreen(screen, slots)) return null;
+  const structuralScore = scoreStructure(screen, slots);
+  if (requireStructure && structuralScore < MIN_STRUCTURE_SCORE) return null;
+  return {
+    id: "",
+    kind: "secondary",
+    layout: layout.id,
+    x,
+    y,
+    structuralScore,
+    slots
+  };
+}
+
+function matchesMainFromCog(
+  cog: { x: number; y: number },
+  layout: LayoutSpec,
+  mainPositions: readonly { x: number; y: number }[]
+): boolean {
+  const candidateX = cog.x + layout.firstFromCog.x;
+  const candidateY = cog.y + layout.firstFromCog.y;
+  return mainPositions.some((anchor) =>
+    Math.abs(candidateX - (anchor.x + layout.firstFromMainAnchor.x)) <= MAIN_ORIGIN_TOLERANCE
+    && Math.abs(candidateY - (anchor.y + layout.firstFromMainAnchor.y)) <= MAIN_ORIGIN_TOLERANCE
+  );
 }
 
 function slotsFitScreen(screen: a1lib.ImgRef, slots: readonly ModernActionBarSlot[]): boolean {
