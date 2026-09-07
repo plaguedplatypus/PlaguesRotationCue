@@ -1,4 +1,5 @@
 import "./styles.css";
+import "./settings.css";
 import { AppState } from "./state";
 import { mountApp } from "./ui/main";
 import { maybeShowUpdateToast } from "./updates/updateToast";

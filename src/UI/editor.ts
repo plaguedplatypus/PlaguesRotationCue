@@ -23,6 +23,7 @@ const categoryLabels: Record<RotationCategory, string> = {
 
 const collapsedRotations = new Set(loadCollapsedRotationIds());
 let picker: { rotationId: string; replaceIndex: number | null } | null = null;
+let deleteConfirmationRotationId: string | null = null;
 
 export type RotationEditorContext = {
   currentIndex: number;
@@ -85,6 +86,12 @@ export function renderEditor(
   categoryRotations.forEach((rotation, index) => {
     rotationList.append(renderRotationCard(rotation, index, categoryRotations.length, state, context));
   });
+
+  if (deleteConfirmationRotationId) {
+    const rotation = state.rotations.find((candidate) => candidate.id === deleteConfirmationRotationId);
+    if (rotation) container.append(renderDeleteConfirmation(rotation, state, context));
+    else deleteConfirmationRotationId = null;
+  }
 }
 
 function renderRotationCard(
@@ -128,10 +135,8 @@ function renderRotationCard(
   activate.addEventListener("click", () => state.toggleRotation(rotation.id));
 
   const remove = iconButton("×", `Delete ${rotation.name}`, () => {
-    collapsedRotations.delete(rotation.id);
-    saveCollapsedRotationIds(collapsedRotations);
-    if (picker?.rotationId === rotation.id) picker = null;
-    state.deleteRotation(rotation.id);
+    deleteConfirmationRotationId = rotation.id;
+    renderEditor(card.closest(".rotation-editor") as HTMLElement, state, context);
   });
   remove.classList.add("is-danger");
   header.append(collapse, up, down, name, activate, remove);
@@ -212,6 +217,72 @@ function renderRotationCard(
 
   if (picker?.rotationId === rotation.id) card.append(renderAbilityPicker(rotation, state, context));
   return card;
+}
+
+function renderDeleteConfirmation(
+  rotation: Rotation,
+  state: AppState,
+  context: RotationEditorContext
+): HTMLElement {
+  const backdrop = document.createElement("div");
+  backdrop.className = "settings-backdrop";
+
+  const modal = document.createElement("section");
+  modal.className = "settings-modal rotation-delete-modal";
+  modal.setAttribute("role", "alertdialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "rotation-delete-title");
+  modal.setAttribute("aria-describedby", "rotation-delete-message");
+
+  const heading = document.createElement("header");
+  heading.className = "settings-modal-heading";
+  const title = document.createElement("h2");
+  title.id = "rotation-delete-title";
+  title.textContent = "Delete rotation?";
+
+  const close = iconButton("×", "Cancel deletion", cancel);
+  close.className = "settings-modal-close";
+  heading.append(title, close);
+
+  const body = document.createElement("div");
+  body.className = "settings-modal-body rotation-delete-body";
+  const message = document.createElement("p");
+  message.className = "rotation-delete-message";
+  message.id = "rotation-delete-message";
+  message.textContent = `Delete “${rotation.name}”? This cannot be undone.`;
+
+  const actions = document.createElement("div");
+  actions.className = "rotation-delete-actions";
+  const cancelButton = smallTextButton("Cancel", cancel);
+  const confirmButton = smallTextButton("Delete", () => {
+    deleteConfirmationRotationId = null;
+    collapsedRotations.delete(rotation.id);
+    saveCollapsedRotationIds(collapsedRotations);
+    if (picker?.rotationId === rotation.id) picker = null;
+    state.deleteRotation(rotation.id);
+  });
+  confirmButton.classList.add("rotation-delete-confirm");
+  actions.append(cancelButton, confirmButton);
+  body.append(message, actions);
+  modal.append(heading, body);
+  backdrop.append(modal);
+
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) cancel();
+  });
+  backdrop.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    cancel();
+  });
+  window.setTimeout(() => cancelButton.focus(), 0);
+  return backdrop;
+
+  function cancel(): void {
+    deleteConfirmationRotationId = null;
+    const editor = backdrop.closest(".rotation-editor") as HTMLElement | null;
+    if (editor) renderEditor(editor, state, context);
+  }
 }
 
 function renderStep(
