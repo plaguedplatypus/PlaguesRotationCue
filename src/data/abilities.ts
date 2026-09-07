@@ -62,7 +62,7 @@ const groups: CatalogGroup[] = [
     style: "Magic",
     pickerSection: "spell",
     assetDirectory: "spells/normal",
-    ids: `bind confuse crumble_undead curse divine_storm enfeeble entangle snare stagger temporal_anomaly vulnerability weaken`
+    ids: `bind confuse crumble_undead curse divine_storm enfeeble entangle snare stagger vulnerability weaken`
   },
   {
     style: "Magic",
@@ -75,6 +75,12 @@ const groups: CatalogGroup[] = [
     pickerSection: "aspect",
     assetDirectory: "spells/aspects",
     ids: `animate_dead penance vampyrism`
+  },
+  {
+    style: "Magic",
+    pickerSection: "aspect",
+    assetDirectory: "spells/normal",
+    ids: `temporal_anomaly`
   }
 ];
 

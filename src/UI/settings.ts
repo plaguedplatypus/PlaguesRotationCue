@@ -124,13 +124,6 @@ export function settingsModalMarkup(settings: RotationCueSettings, positioningOv
             </div>
           `)}
 
-          ${settingsSection("Data", `
-            <div class="settings-button-pair">
-              <button class="settings-action" type="button" data-placeholder-action>Export All Rotations</button>
-              <button class="settings-action" type="button" data-placeholder-action>Import Rotations</button>
-            </div>
-          `)}
-
           ${settingsSection("Support", `
             <div class="support-links">
               <a class="support-link" href="https://ko-fi.com/plaguedplatypus" target="_blank" rel="noopener noreferrer">
