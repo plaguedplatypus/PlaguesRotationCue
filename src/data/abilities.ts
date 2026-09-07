@@ -52,11 +52,11 @@ const groups: CatalogGroup[] = [
   },
   {
     style: "Defensive",
-    ids: `anticipation barricade bash cease debilitate devotion divert escape freedom immortality natural_instinct preparation provoke reflect rejuvenate resonance revenge sacrifice siphon surge dive`
+    ids: `anticipation barricade bash cease debilitate devotion divert escape freedom immortality natural_instinct preparation provoke reflect rejuvenate resonance revenge surge dive`
   },
   {
     style: "Utility",
-    ids: `demon_slayer dragon_slayer essence_of_finality ingenuity_of_the_humans limitless onslaught pray_magic pray_melee pray_necro pray_ranged reprisal shatter slayers_insight soul_split storm_shards transfigure tuskas_wrath undead_slayer weapon_special_attack`
+    ids: `demon_slayer dragon_slayer essence_of_finality guthixs_blessing ice_asylum ingenuity_of_the_humans limitless onslaught pray_magic pray_melee pray_necro pray_ranged reprisal sacrifice shatter siphon slayers_insight soul_split storm_shards transfigure tuskas_wrath undead_slayer weapon_special_attack`
   },
   {
     style: "Magic",
@@ -87,6 +87,7 @@ const nameOverrides: Record<string, string> = {
   greater_death_swiftness: "Greater Death's Swiftness",
   essence_of_finality: "Essence of Finality",
   invoke_lob: "Invoke Lord of Bones",
+  guthixs_blessing: "Guthix's Blessing",
   pray_necro: "Pray Necromancy",
   slayers_insight: "Slayer's Insight",
   tuskas_wrath: "Tuska's Wrath"
@@ -172,6 +173,8 @@ const cooldowns: Record<string, number> = {
   reflect: 30,
   debilitate: 30,
   immortality: 120,
+  guthixs_blessing: 300,
+  ice_asylum: 300,
   rejuvenate: 300,
   barricade: 60,
   natural_instinct: 120,

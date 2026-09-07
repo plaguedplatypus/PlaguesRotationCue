@@ -47,7 +47,7 @@ const LAYOUTS: readonly LayoutSpec[] = [
   {
     id: "flat", columns: 14, rows: 1, pitchX: 36, pitchY: 0, order: "row",
     firstFromCog: { x: -505, y: -16 },
-    firstFromMainAnchor: { x: -126, y: 33 }
+    firstFromMainAnchor: { x: -126, y: 35 }
   },
   {
     id: "grid", columns: 7, rows: 2, pitchX: 35, pitchY: 35, order: "row",
@@ -77,6 +77,34 @@ export class ModernActionBarLocator {
     const mainPositions = anchors.mainAdrenaline.flatMap((anchor) => screen.findSubimage(anchor));
     const candidates: ModernActionBar[] = [];
 
+    for (const anchor of mainPositions) {
+      let best: ModernActionBar | null = null;
+      for (const layout of LAYOUTS) {
+        const x = anchor.x + layout.firstFromMainAnchor.x;
+        const y = anchor.y + layout.firstFromMainAnchor.y;
+        const slots = createSlots(x, y, layout);
+        if (!slotsFitScreen(screen, slots)) continue;
+        const structuralScore = scoreStructure(screen, slots);
+        if (structuralScore < MIN_STRUCTURE_SCORE) continue;
+        const candidate: ModernActionBar = {
+          id: "",
+          kind: "main",
+          layout: layout.id,
+          x,
+          y,
+          structuralScore,
+          slots
+        };
+        if (!best || candidate.structuralScore > best.structuralScore) best = candidate;
+      }
+      if (!best) continue;
+      const duplicateIndex = candidates.findIndex((candidate) => sameOrigin(candidate, best!));
+      if (duplicateIndex === -1) candidates.push(best);
+      else if (best.structuralScore > candidates[duplicateIndex].structuralScore) {
+        candidates[duplicateIndex] = best;
+      }
+    }
+
     for (const cog of cogPositions) {
       let best: ModernActionBar | null = null;
       for (const layout of LAYOUTS) {
@@ -97,9 +125,7 @@ export class ModernActionBarLocator {
         };
         if (!best || candidate.structuralScore > best.structuralScore) best = candidate;
       }
-      if (best && !candidates.some((candidate) => sameOrigin(candidate, best!))) {
-        candidates.push(best);
-      }
+      if (best && !candidates.some((candidate) => sameOrigin(candidate, best!))) candidates.push(best);
     }
 
     for (const candidate of candidates) {

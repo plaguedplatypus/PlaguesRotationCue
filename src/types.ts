@@ -1,16 +1,3 @@
-export type AbilityStatus = "ready" | "cooldown" | "unknown";
-
-export interface AbilityState {
-  abilityId: string;
-  visible: boolean;
-  status: AbilityStatus;
-  cooldownSeconds?: number;
-}
-
-export interface DetectedAbility extends AbilityState {
-  confidence: number;
-}
-
 export interface DetectedSlot {
   barIndex: number;
   slotIndex: number;
@@ -20,7 +7,6 @@ export interface DetectedSlot {
   margin: number;
   empty?: boolean;
   emptyScore?: number;
-  runnerUpAbilityId?: string;
   rejectionReason?: string;
   previewDataUrl?: string;
 }
@@ -36,8 +22,6 @@ export interface AbilityScanResult {
   empty: number;
   unknown: number;
   durationMs: number;
-  capturedAt?: number;
-  abilities: DetectedAbility[];
   slots: DetectedSlot[];
 }
 
@@ -59,7 +43,6 @@ export interface ExpectedAbilityObservation {
   brightnessRatio?: number;
   gcdTransient: boolean;
   cooldownRawText?: string;
-  cooldownText?: string;
   cooldownSeconds?: number;
   cooldownFrames: number;
   observationMs: number;

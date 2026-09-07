@@ -1,7 +1,6 @@
 import * as a1lib from "alt1/base";
 import type {
   AbilityScanResult,
-  DetectedAbility,
   DetectedSlot,
   ExpectedAbilityObservation,
   ExpectedTrackingState
@@ -75,7 +74,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
       if (showGeometry) showActionBarGeometry(bars);
 
       const slots: DetectedSlot[] = [];
-      const detectedAbilities: DetectedAbility[] = [];
+      let recognized = 0;
       const areas = bars.map((bar) => captureAreaForSlots(bar.slots));
       const capturesByBar = bars.map(() => [] as ImageData[]);
       for (let sample = 0; sample < DISCOVERY_SAMPLES; sample++) {
@@ -128,7 +127,6 @@ export class DiagnosticAbilityReader implements AbilityReader {
             margin: match.margin,
             empty: match.empty,
             emptyScore: match.emptyScore,
-            runnerUpAbilityId: match.runnerUpAbilityId,
             rejectionReason: match.rejectionReason,
             previewDataUrl: slotPreviewDataUrl(capture, rect)
           };
@@ -144,12 +142,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
                 confidence: match.score
               });
             }
-            detectedAbilities.push({
-              abilityId: match.abilityId,
-              visible: true,
-              status: "unknown",
-              confidence: match.score
-            });
+            recognized++;
           }
         }
       }
@@ -158,17 +151,15 @@ export class DiagnosticAbilityReader implements AbilityReader {
       const emptySlots = slots.filter((slot) => slot.empty).length;
       return {
         availability: "available",
-        message: detectedAbilities.length
-          ? `Recognized ${detectedAbilities.length} of ${slots.length} visible slots.`
+        message: recognized
+          ? `Recognized ${recognized} of ${slots.length} visible slots.`
           : `Found ${bars.length} action bar${bars.length === 1 ? "" : "s"}, but no icons met the acceptance threshold. Retry with the global cooldown clear; the slot previews below show exactly what was captured.`,
         barsFound: bars.length,
         slotsFound: slots.length,
-        recognized: detectedAbilities.length,
+        recognized,
         empty: emptySlots,
-        unknown: slots.length - detectedAbilities.length - emptySlots,
+        unknown: slots.length - recognized - emptySlots,
         durationMs,
-        capturedAt: Date.now(),
-        abilities: detectedAbilities,
         slots
       };
     } catch (error) {
@@ -214,11 +205,15 @@ export class DiagnosticAbilityReader implements AbilityReader {
         "Expected ability template is unavailable.");
     }
 
-    const cooldown = readCooldown(capture, rect);
-    const cooldownTextPresent = cooldown.seconds !== undefined && cooldown.seconds > 0;
-    let hasOwnCooldownSignal = cooldownTextPresent;
-    const identityStrong = measurement.similarity >= 0.55;
     const configuredCooldownSeconds = abilityById.get(abilityId)?.cooldownSeconds;
+    const cooldown = readCooldown(capture, rect, {
+      maximumSeconds: configuredCooldownSeconds
+    });
+    const identityStrong = measurement.similarity >= 0.55;
+    const cooldownTextPresent = cooldown.seconds !== undefined
+      && cooldown.seconds > 0
+      && (cooldown.reliable !== false || !identityStrong);
+    let hasOwnCooldownSignal = cooldownTextPresent;
     const rolloverPrimeSeconds = configuredCooldownSeconds !== undefined
       ? Math.min(COOLDOWN_ROLLOVER_PRIME_SECONDS, Math.max(2, Math.ceil(configuredCooldownSeconds / 2)))
       : 2;
@@ -236,6 +231,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
       } else if (!this.tracking.armed
         && !this.tracking.eventEmitted
         && this.tracking.cooldownRolloverPrimed
+        && cooldown.reliable !== false
         && rolloverThreshold !== undefined
         && observedSeconds >= rolloverThreshold) {
         if (this.tracking.cooldownRolloverFrames === 0) {
@@ -401,7 +397,6 @@ export class DiagnosticAbilityReader implements AbilityReader {
       brightnessRatio,
       gcdTransient,
       cooldownRawText: cooldown.rawText || undefined,
-      cooldownText: cooldown.normalizedText || undefined,
       cooldownSeconds: cooldown.seconds,
       cooldownFrames: this.tracking.cooldownFrames,
       observationMs: Math.round((performance.now() - startedAt) * 10) / 10,
@@ -536,7 +531,6 @@ function emptyResult(
     empty: 0,
     unknown: 0,
     durationMs: Math.round(performance.now() - startedAt),
-    abilities: [],
     slots: []
   };
 }

@@ -245,8 +245,7 @@ button:disabled {
   overflow-y: auto;
 }
 
-.settings-section>h3,
-.settings-subheading {
+.settings-section>h3 {
   margin-left: -7px;
   padding: 4px 0 0 3px;
   color: #d8c58a;
@@ -412,11 +411,6 @@ button:disabled {
 .settings-color::-webkit-color-swatch {
   border: 0;
   border-radius: 1px;
-}
-
-.settings-subheading {
-  margin-top: 2px;
-  border: 1px solid var(--line-soft);
 }
 
 .settings-keybind-list {
@@ -1031,7 +1025,6 @@ button:disabled {
 }
 
 .button-secondary,
-.button-quiet,
 .button-accent {
   background: linear-gradient(#262626, #1e1e1e);
 }

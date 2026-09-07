@@ -6,7 +6,6 @@ export type IconMatch = {
   margin: number;
   empty?: boolean;
   emptyScore?: number;
-  runnerUpAbilityId?: string;
   accepted: boolean;
   rejectionReason?: string;
 };
@@ -108,14 +107,24 @@ export class IconMatcher {
         margin,
         empty: true,
         emptyScore: normalizedEmptyScore,
-        runnerUpAbilityId: best.abilityId,
         accepted: false,
         rejectionReason: "Empty slot"
       };
     }
+    const acceptsCloseColorVariant = (
+      best.abilityId === "animate_dead"
+      || best.abilityId === "smoke_cloud"
+    )
+      && score >= 0.94
+      && margin >= 0.035;
+    const acceptsDarkShadowBarrage = best.abilityId === "shadow_barrage"
+      && score >= 0.82
+      && margin >= 0.045;
     const accepted = (score >= 0.68 && margin >= 0.12) ||
       (score >= 0.72 && margin >= 0.08) ||
-      (score >= 0.84 && margin >= 0.06);
+      (score >= 0.84 && margin >= 0.06) ||
+      acceptsCloseColorVariant ||
+      acceptsDarkShadowBarrage;
 
     return {
       abilityId: best.abilityId,
@@ -123,7 +132,6 @@ export class IconMatcher {
       margin,
       empty: false,
       emptyScore: normalizedEmptyScore,
-      runnerUpAbilityId: runnerUp?.abilityId,
       accepted,
       rejectionReason: accepted
         ? undefined

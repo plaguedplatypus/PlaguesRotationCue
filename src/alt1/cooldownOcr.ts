@@ -1,6 +1,6 @@
 import * as OCR from "alt1/ocr";
-import modernCooldownFont from "alt1/fonts/aa_8px_mono";
-import legacyCooldownFont from "alt1/fonts/pixel_8px_digits";
+import modernCooldownFont from "../assets/fonts/modern_cooldown_digits.json";
+import modernFallbackFont from "alt1/fonts/aa_8px_mono";
 
 export interface CooldownSlotRect {
   x: number;
@@ -11,18 +11,18 @@ export interface CooldownSlotRect {
 
 export interface CooldownOcrResult {
   rawText: string;
-  normalizedText: string;
   seconds?: number;
-  source?: CooldownOcrSource;
+  reliable?: boolean;
 }
 
-export type CooldownOcrSource =
-  | "modern-line"
-  | "modern-backwards"
-  | "modern-find"
-  | "legacy-line";
+export interface CooldownOcrOptions {
+  maximumSeconds?: number;
+}
 
-type CooldownFontKind = "modern" | "legacy";
+type CooldownOcrSource =
+  | "modern-digits"
+  | "modern-line"
+  | "modern-backwards";
 
 type CooldownNormalization = {
   text: string;
@@ -33,8 +33,10 @@ type CooldownNormalization = {
   specialSubstitutionCount: number;
 };
 
-type CooldownCandidate = CooldownOcrResult & {
+type CooldownCandidate = {
+  rawText: string;
   seconds: number;
+  reliable: boolean;
   score: number;
 };
 
@@ -43,15 +45,16 @@ const MODERN_COOLDOWN_COLORS: OCR.ColortTriplet[] = [
   [248, 248, 248],
   [235, 235, 235]
 ];
-const LEGACY_COOLDOWN_COLORS: OCR.ColortTriplet[] = [[206, 213, 135]];
 
 const BASELINE_OFFSETS = [9, 10, 8, 11, 12];
 const RIGHT_EDGE_DELTAS = [0, -1, -2, -3, -4, -5, -6, -7, -8, -9];
 const MAX_COOLDOWN_SECONDS = 600;
+const MODERN_FONT = modernCooldownFont as unknown as OCR.FontDefinition;
+const MODERN_FALLBACK_FONT = modernFallbackFont as unknown as OCR.FontDefinition;
 
 const STRONG_LOOKALIKES: Record<string, string> = {
   o: "0", O: "0", Q: "0",
-  l: "1", L: "1", "!": "1", "|": "1",
+  l: "1", L: "1", "|": "1",
   z: "2", Z: "2",
   s: "5", S: "5",
   b: "6",
@@ -69,35 +72,33 @@ const WEAK_LOOKALIKES: Record<string, string> = {
 
 export function readCooldown(
   capture: ImageData,
-  rect: CooldownSlotRect
+  rect: CooldownSlotRect,
+  options: CooldownOcrOptions = {}
 ): CooldownOcrResult {
-  const modernFont = modernCooldownFont as unknown as OCR.FontDefinition;
-  const legacyFont = legacyCooldownFont as unknown as OCR.FontDefinition;
   const candidates: CooldownCandidate[] = [];
   let bestRejectedRawText = "";
-  let bestRejectedNormalizedText = "";
 
   const consider = (
     rawText: string,
     source: CooldownOcrSource,
-    fontKind: CooldownFontKind,
     preference: number
   ): void => {
     const raw = String(rawText || "").trim();
     if (raw.length > bestRejectedRawText.length) bestRejectedRawText = raw;
 
-    const normalized = normalizeCandidate(raw, fontKind);
+    const normalized = normalizeCandidate(raw);
     const seconds = normalized.valid ? parseCooldownText(normalized.text) : undefined;
-    if (seconds !== undefined) {
+    const maximumSeconds = options.maximumSeconds !== undefined
+      ? Math.ceil(options.maximumSeconds)
+      : MAX_COOLDOWN_SECONDS;
+    if (seconds !== undefined && seconds <= maximumSeconds) {
       candidates.push({
         rawText: raw,
-        normalizedText: normalized.text,
         seconds,
-        source,
-        score: scoreCandidate(normalized, source, preference)
+        reliable: source === "modern-digits"
+          || (normalized.hasRealDigit && normalized.substitutionCount === 0),
+        score: scoreCandidate(normalized, preference)
       });
-    } else if (normalized.text.length > bestRejectedNormalizedText.length) {
-      bestRejectedNormalizedText = normalized.text;
     }
   };
 
@@ -107,13 +108,23 @@ export function readCooldown(
       consider(
         readLineSafe(
           capture,
-          modernFont,
+          MODERN_FONT,
+          MODERN_COOLDOWN_COLORS,
+          modernRightEdge + rightDelta,
+          rect.y + baselineOffset
+        ),
+        "modern-digits",
+        45
+      );
+      consider(
+        readLineSafe(
+          capture,
+          MODERN_FALLBACK_FONT,
           MODERN_COOLDOWN_COLORS,
           modernRightEdge + rightDelta,
           rect.y + baselineOffset
         ),
         "modern-line",
-        "modern",
         30
       );
     }
@@ -127,7 +138,7 @@ export function readCooldown(
     consider(
       readSmallCapsSafe(
         capture,
-        modernFont,
+        MODERN_FALLBACK_FONT,
         MODERN_COOLDOWN_COLORS,
         fieldX,
         fieldY,
@@ -135,56 +146,15 @@ export function readCooldown(
         fieldHeight
       ),
       "modern-backwards",
-      "modern",
       25
     );
-    consider(
-      findLineSafe(
-        capture,
-        modernFont,
-        MODERN_COOLDOWN_COLORS,
-        fieldX,
-        fieldY,
-        fieldWidth,
-        fieldHeight
-      ),
-      "modern-find",
-      "modern",
-      20
-    );
-  }
-
-  const legacyRightEdge = rect.x + rect.width + 1;
-  for (const baselineOffset of BASELINE_OFFSETS) {
-    for (const rightDelta of RIGHT_EDGE_DELTAS) {
-      consider(
-        readLineSafe(
-          capture,
-          legacyFont,
-          LEGACY_COOLDOWN_COLORS,
-          legacyRightEdge + rightDelta,
-          rect.y + baselineOffset
-        ),
-        "legacy-line",
-        "legacy",
-        8
-      );
-    }
   }
 
   candidates.sort((left, right) => right.score - left.score);
-  return candidates[0] || {
-    rawText: bestRejectedRawText,
-    normalizedText: bestRejectedNormalizedText
-  };
-}
-
-export function normalizeCooldownText(
-  rawText: string,
-  fontKind: CooldownFontKind = "modern"
-): string {
-  const normalized = normalizeCandidate(rawText, fontKind);
-  return normalized.valid ? normalized.text : "";
+  const best = candidates[0];
+  return best
+    ? { rawText: best.rawText, seconds: best.seconds, reliable: best.reliable }
+    : { rawText: bestRejectedRawText };
 }
 
 export function parseCooldownText(text: string): number | undefined {
@@ -210,7 +180,7 @@ export function parseCooldownText(text: string): number | undefined {
     : undefined;
 }
 
-function normalizeCandidate(rawText: string, fontKind: CooldownFontKind): CooldownNormalization {
+function normalizeCandidate(rawText: string): CooldownNormalization {
   const raw = String(rawText || "");
   let text = "";
   let hasRealDigit = false;
@@ -221,7 +191,7 @@ function normalizeCandidate(rawText: string, fontKind: CooldownFontKind): Cooldo
   for (let index = 0; index < raw.length; index++) {
     const char = raw[index];
 
-    if (fontKind === "modern" && char === "." && raw[index + 1] === ".") {
+    if (char === "." && raw[index + 1] === ".") {
       text += "2";
       substitutionCount++;
       specialSubstitutionCount++;
@@ -245,9 +215,17 @@ function normalizeCandidate(rawText: string, fontKind: CooldownFontKind): Cooldo
     }
 
     if (char === "i" || char === "I") {
-      text += fontKind === "modern" ? "4" : "1";
+      text += "4";
       substitutionCount++;
-      specialSubstitutionCount += fontKind === "modern" ? 1 : 0;
+      specialSubstitutionCount++;
+      continue;
+    }
+
+    if (char === "!") {
+      if (!/\d/.test(raw)) return invalidNormalization(text);
+      text += "1";
+      substitutionCount++;
+      specialSubstitutionCount++;
       continue;
     }
 
@@ -300,7 +278,6 @@ function invalidNormalization(text = ""): CooldownNormalization {
 
 function scoreCandidate(
   normalized: CooldownNormalization,
-  source: CooldownOcrSource,
   preference: number
 ): number {
   const timerGlyphs = normalized.text.replace(/[:m]/g, "").length;
@@ -311,7 +288,6 @@ function scoreCandidate(
   score -= normalized.substitutionCount * 3;
   score -= normalized.weakSubstitutionCount * 5;
   score -= normalized.specialSubstitutionCount * 3;
-  if (source === "legacy-line") score -= 8;
   return score;
 }
 
@@ -340,22 +316,6 @@ function readSmallCapsSafe(
 ): string {
   try {
     return String(OCR.readSmallCapsBackwards(capture, font, colors, x, y, width, height)?.text || "");
-  } catch {
-    return "";
-  }
-}
-
-function findLineSafe(
-  capture: ImageData,
-  font: OCR.FontDefinition,
-  colors: OCR.ColortTriplet[],
-  x: number,
-  y: number,
-  width: number,
-  height: number
-): string {
-  try {
-    return String(OCR.findReadLine(capture, font, colors, x, y, width, height)?.text || "");
   } catch {
     return "";
   }

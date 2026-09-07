@@ -25,13 +25,6 @@ export class AppState {
     return () => this.listeners.delete(listener);
   }
 
-  selectRotation(rotationId: string): void {
-    if (!this.rotations.some((rotation) => rotation.id === rotationId)) return;
-    this.activeRotationId = rotationId;
-    saveActiveRotationId(rotationId);
-    this.emit();
-  }
-
   toggleRotation(rotationId: string): void {
     if (!this.rotations.some((rotation) => rotation.id === rotationId)) return;
     this.activeRotationId = this.activeRotationId === rotationId ? "" : rotationId;
