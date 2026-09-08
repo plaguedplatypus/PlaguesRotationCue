@@ -48,6 +48,53 @@ export interface PickerSectionCatalogEntry {
   categories: CatalogCategories;
 }
 
+export interface ActionBarSequenceCatalogEntry {
+  abilityIds: readonly string[];
+  useTransitions: readonly (readonly [fromAbilityId: string, toAbilityId: string])[];
+  /**
+   * Timer started by the first cast, hidden while later stages occupy the slot,
+   * then exposed on the first-stage icon after the final cast or a timeout.
+   */
+  cooldownSeconds?: number;
+}
+
+// Icon states that occupy one physical action-bar slot and keybind. Only transitions
+// caused by an activation belong in useTransitions; expiry resets must not advance cues.
+export const ACTION_BAR_SEQUENCES: readonly ActionBarSequenceCatalogEntry[] = [
+  {
+    abilityIds: ["dismember", "slaughter", "massacre"],
+    cooldownSeconds: 24,
+    useTransitions: [
+      ["dismember", "slaughter"],
+      ["slaughter", "massacre"]
+    ]
+  },
+  {
+    abilityIds: ["spectral_scythe", "spectral_scythe_2", "spectral_scythe_3"],
+    cooldownSeconds: 15,
+    useTransitions: [
+      ["spectral_scythe", "spectral_scythe_2"],
+      ["spectral_scythe_2", "spectral_scythe_3"]
+    ]
+  },
+  {
+    abilityIds: ["conjure_skeleton_warrior", "command_skeleton_warrior"],
+    useTransitions: [["conjure_skeleton_warrior", "command_skeleton_warrior"]]
+  },
+  {
+    abilityIds: ["conjure_putrid_zombie", "command_putrid_zombie"],
+    useTransitions: [["conjure_putrid_zombie", "command_putrid_zombie"]]
+  },
+  {
+    abilityIds: ["conjure_vengeful_ghost", "command_vengeful_ghost"],
+    useTransitions: [["conjure_vengeful_ghost", "command_vengeful_ghost"]]
+  },
+  {
+    abilityIds: ["conjure_phantom_guardian", "command_phantom_guardian"],
+    useTransitions: [["conjure_phantom_guardian", "command_phantom_guardian"]]
+  }
+];
+
 export const PICKER_SECTIONS: readonly PickerSectionCatalogEntry[] = [
   { id: "combat", label: "Combat abilities", icon: "./assets/melee.png", categories: "all" },
   { id: "spell", label: "Spells", icon: "./assets/spells/ancient/blood_barrage.png", categories: ["magic", "hybrid"] },
@@ -187,6 +234,8 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
       { id: "soul_sap", cooldownSeconds: 5.4 },
       { id: "soul_strike" },
       { id: "spectral_scythe", cooldownSeconds: 15 },
+      { id: "spectral_scythe_2" },
+      { id: "spectral_scythe_3" },
       { id: "split_soul", cooldownSeconds: 60 },
       { id: "threads_of_fate", cooldownSeconds: 45 },
       { id: "touch_of_death", cooldownSeconds: 14.4 },

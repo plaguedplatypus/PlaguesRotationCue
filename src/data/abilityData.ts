@@ -1,5 +1,6 @@
 import type { AbilityDefinition, AbilityStyle, RotationCategory } from "../types";
 import {
+  ACTION_BAR_SEQUENCES,
   CATALOG_SECTIONS,
   COMBAT_CATEGORY_PRESENTATION,
   PICKER_SECTIONS,
@@ -83,6 +84,56 @@ export const abilities: AbilityDefinition[] = abilityCatalog.map((entry) => ({
 }));
 
 export const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
+
+const actionBarSequenceByAbilityId = new Map<string, readonly string[]>();
+const actionBarUseTransitionByAbilityId = new Map<string, string>();
+const actionBarSequenceCooldownByAbilityId = new Map<string, number>();
+for (const sequence of ACTION_BAR_SEQUENCES) {
+  if (sequence.abilityIds.length < 2) {
+    throw new Error("Action-bar sequences must contain at least two abilities.");
+  }
+  if (sequence.cooldownSeconds !== undefined && sequence.cooldownSeconds <= 0) {
+    throw new Error("Action-bar sequence cooldowns must be greater than zero.");
+  }
+  for (const abilityId of sequence.abilityIds) {
+    if (!abilityById.has(abilityId)) {
+      throw new Error(`Action-bar sequence uses unknown or unscannable ability ${abilityId}.`);
+    }
+    if (actionBarSequenceByAbilityId.has(abilityId)) {
+      throw new Error(`Ability ${abilityId} belongs to more than one action-bar sequence.`);
+    }
+    actionBarSequenceByAbilityId.set(abilityId, sequence.abilityIds);
+    if (sequence.cooldownSeconds !== undefined) {
+      actionBarSequenceCooldownByAbilityId.set(abilityId, sequence.cooldownSeconds);
+    }
+  }
+  for (const [fromAbilityId, toAbilityId] of sequence.useTransitions) {
+    if (!sequence.abilityIds.includes(fromAbilityId)
+      || !sequence.abilityIds.includes(toAbilityId)) {
+      throw new Error(`Action-bar sequence contains invalid transition ${fromAbilityId} -> ${toAbilityId}.`);
+    }
+    if (actionBarUseTransitionByAbilityId.has(fromAbilityId)) {
+      throw new Error(`Ability ${fromAbilityId} has more than one action-bar use transition.`);
+    }
+    actionBarUseTransitionByAbilityId.set(fromAbilityId, toAbilityId);
+  }
+}
+
+export function actionBarSequenceForAbility(abilityId: string): readonly string[] | undefined {
+  return actionBarSequenceByAbilityId.get(abilityId);
+}
+
+export function actionBarBindingAbilityId(abilityId: string): string {
+  return actionBarSequenceForAbility(abilityId)?.[0] ?? abilityId;
+}
+
+export function nextActionBarSequenceAbilityId(abilityId: string): string | undefined {
+  return actionBarUseTransitionByAbilityId.get(abilityId);
+}
+
+export function actionBarSequenceCooldownSeconds(abilityId: string): number | undefined {
+  return actionBarSequenceCooldownByAbilityId.get(abilityId);
+}
 
 export const rotationCatalog: RotationCatalogEntry[] = derivedCatalog
   .map(runtimeEntry)

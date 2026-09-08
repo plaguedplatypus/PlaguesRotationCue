@@ -1,4 +1,10 @@
-import { rotationEntryById } from "../data/abilityData";
+import {
+  actionBarBindingAbilityId,
+  actionBarSequenceCooldownSeconds,
+  actionBarSequenceForAbility,
+  nextActionBarSequenceAbilityId,
+  rotationEntryById
+} from "../data/abilityData";
 import type { AbilityScanResult, DetectedSlot } from "../types";
 
 const KEYBINDS_KEY = "rotation-cue.visual-keybinds.v1";
@@ -27,11 +33,14 @@ export function cueKeybindSequence(
   autoAdvance: boolean
 ): string[] {
   const entry = rotationEntryById.get(abilityId);
-  const keybind = keybinds[abilityId];
+  const bindingAbilityId = actionBarBindingAbilityId(abilityId);
+  const keybind = keybinds[bindingAbilityId] ?? keybinds[abilityId];
   if (!entry || !keybind || entry.pickerSection === "item" || entry.pickerSection === "cue") {
     return ["Alt+1"];
   }
-  return autoAdvance && entry.cooldownSeconds !== undefined
+  return autoAdvance && (entry.cooldownSeconds !== undefined
+    || actionBarSequenceCooldownSeconds(abilityId) !== undefined
+    || nextActionBarSequenceAbilityId(abilityId) !== undefined)
     ? [keybind]
     : [keybind, "Alt+1"];
 }
@@ -154,8 +163,12 @@ function recognizedSlots(result: AbilityScanResult | null): DetectedSlot[] {
 function visualKeybindRow(slot: DetectedSlot, keybinds: VisualKeybinds): string {
   const abilityId = slot.abilityId!;
   const entry = rotationEntryById.get(abilityId);
-  const value = keybinds[abilityId] ?? "";
-  const name = entry?.name ?? abilityId;
+  const bindingAbilityId = actionBarBindingAbilityId(abilityId);
+  const value = keybinds[bindingAbilityId] ?? keybinds[abilityId] ?? "";
+  const sequence = actionBarSequenceForAbility(abilityId);
+  const name = sequence
+    ? `${rotationEntryById.get(sequence[0])?.name ?? sequence[0]} sequence`
+    : entry?.name ?? abilityId;
   const icon = entry?.icon
     ? `<img src="${escapeHtml(entry.icon)}" alt="">`
     : "";
@@ -166,7 +179,7 @@ function visualKeybindRow(slot: DetectedSlot, keybinds: VisualKeybinds): string 
         <strong>${escapeHtml(name)}</strong>
         <small>Slot ${slot.slotIndex}</small>
       </span>
-      <button class="visual-keybind-input" type="button" data-ability-id="${escapeHtml(abilityId)}"
+      <button class="visual-keybind-input" type="button" data-ability-id="${escapeHtml(bindingAbilityId)}"
         data-value="${escapeHtml(value)}" aria-label="Set keybind for ${escapeHtml(name)}">${escapeHtml(value || "Unbound")}</button>
     </div>`;
 }

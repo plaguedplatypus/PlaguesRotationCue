@@ -11,6 +11,7 @@ export type IconMatch = {
 };
 
 export type KnownIconMeasurement = {
+  abilityId: string;
   similarity: number;
   brightness: number;
 };
@@ -149,11 +150,17 @@ export class IconMatcher {
     return this.emptyTemplatePromise;
   }
 
-  async measureKnown(image: ImageData, rect: ImageRect, abilityId: string): Promise<KnownIconMeasurement | null> {
-    const template = (await this.prepare()).find((candidate) => candidate.abilityId === abilityId);
-    if (!template) return null;
+  async measureKnownAbilities(
+    image: ImageData,
+    rect: ImageRect,
+    abilityIds: readonly string[]
+  ): Promise<KnownIconMeasurement[]> {
+    const requestedIds = new Set(abilityIds);
+    const templates = (await this.prepare())
+      .filter((candidate) => requestedIds.has(candidate.abilityId));
+    if (!templates.length) return [];
 
-    let similarity = -1;
+    const similarities = new Map(templates.map((template) => [template.abilityId, -1]));
     for (let deltaY = -ALIGNMENT_RADIUS; deltaY <= ALIGNMENT_RADIUS; deltaY++) {
       for (let deltaX = -ALIGNMENT_RADIUS; deltaX <= ALIGNMENT_RADIUS; deltaX++) {
         const vector = sampleVector(image, {
@@ -161,14 +168,21 @@ export class IconMatcher {
           x: rect.x + deltaX,
           y: rect.y + deltaY
         });
-        similarity = Math.max(similarity, dot(vector, template.vector));
+        for (const template of templates) {
+          similarities.set(template.abilityId, Math.max(
+            similarities.get(template.abilityId) ?? -1,
+            dot(vector, template.vector)
+          ));
+        }
       }
     }
 
-    return {
-      similarity: clampScore(similarity),
-      brightness: sampleBrightness(image, rect)
-    };
+    const brightness = sampleBrightness(image, rect);
+    return templates.map((template) => ({
+      abilityId: template.abilityId,
+      similarity: clampScore(similarities.get(template.abilityId) ?? -1),
+      brightness
+    }));
   }
 }
 

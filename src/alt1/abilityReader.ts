@@ -5,7 +5,12 @@ import type {
   ExpectedAbilityObservation,
   ExpectedTrackingState
 } from "../types";
-import { abilityById } from "../data/abilityData";
+import {
+  abilityById,
+  actionBarSequenceCooldownSeconds,
+  actionBarSequenceForAbility,
+  nextActionBarSequenceAbilityId
+} from "../data/abilityData";
 import { IconMatcher, type IconMatch } from "./iconMatcher";
 import {
   clearActionBarGeometry,
@@ -26,6 +31,12 @@ const READY_CONFIRM_FRAMES = 2;
 const UNCERTAIN_COOLDOWN_CLEAR_FRAMES = 3;
 const REARM_CONFIRM_FRAMES = 8;
 const COOLDOWN_ROLLOVER_PRIME_SECONDS = 3;
+const SEQUENCE_TRANSITION_MIN_SIMILARITY = 0.68;
+const SEQUENCE_TRANSITION_MARGIN = 0.08;
+const SEQUENCE_TRANSITION_CONFIRM_FRAMES = 2;
+const HURRICANE_READY_OCR_ARTIFACT_SECONDS = 3;
+const READY_ICON_ARTIFACT_MIN_SIMILARITY = 0.90;
+const READY_ICON_ARTIFACT_MIN_BRIGHTNESS_RATIO = 0.90;
 
 export interface AbilityReader {
   scan(options?: AbilityScanOptions): Promise<AbilityScanResult>;
@@ -134,9 +145,12 @@ export class DiagnosticAbilityReader implements AbilityReader {
           };
           slots.push(diagnostic);
           if (match.accepted) {
-            const remembered = this.locationsByAbility.get(match.abilityId);
-            if (!remembered || match.score > remembered.confidence) {
-              this.locationsByAbility.set(match.abilityId, {
+            const linkedAbilityIds = actionBarSequenceForAbility(match.abilityId)
+              ?? [match.abilityId];
+            for (const linkedAbilityId of linkedAbilityIds) {
+              const remembered = this.locationsByAbility.get(linkedAbilityId);
+              if (remembered && match.score <= remembered.confidence) continue;
+              this.locationsByAbility.set(linkedAbilityId, {
                 x: slot.x,
                 y: slot.y,
                 width: slot.width,
@@ -201,21 +215,50 @@ export class DiagnosticAbilityReader implements AbilityReader {
     }
 
     const rect = { x: padding, y: padding, width: location.width, height: location.height };
-    const measurement = await this.matcher.measureKnown(capture, rect, abilityId);
+    const nextSequenceAbilityId = nextActionBarSequenceAbilityId(abilityId);
+    const measurements = await this.matcher.measureKnownAbilities(
+      capture,
+      rect,
+      nextSequenceAbilityId ? [abilityId, nextSequenceAbilityId] : [abilityId]
+    );
+    const measurement = measurements.find((candidate) => candidate.abilityId === abilityId);
     if (!measurement) {
       return this.observation(abilityId, "unavailable", true, 0, 0, startedAt,
         "Expected ability template is unavailable.");
     }
+    const nextSequenceMeasurement = nextSequenceAbilityId
+      ? measurements.find((candidate) => candidate.abilityId === nextSequenceAbilityId)
+      : undefined;
 
-    const configuredCooldownSeconds = abilityById.get(abilityId)?.cooldownSeconds;
+    const configuredCooldownSeconds = abilityById.get(abilityId)?.cooldownSeconds
+      ?? actionBarSequenceCooldownSeconds(abilityId);
     const cooldown = readCooldown(capture, rect, {
       maximumSeconds: configuredCooldownSeconds
     });
     const identityStrong = measurement.similarity >= 0.55;
-    const cooldownTextPresent = cooldown.seconds !== undefined
-      && cooldown.seconds > 0
+    const readyIconCooldownArtifact = abilityId === "hurricane"
+      && cooldown.seconds === HURRICANE_READY_OCR_ARTIFACT_SECONDS
+      && measurement.similarity >= READY_ICON_ARTIFACT_MIN_SIMILARITY
+      && (!this.tracking.baselineBrightness
+        || measurement.brightness >= this.tracking.baselineBrightness
+          * READY_ICON_ARTIFACT_MIN_BRIGHTNESS_RATIO);
+    const detectedCooldownSeconds = readyIconCooldownArtifact
+      ? undefined
+      : cooldown.seconds;
+    const cooldownTextPresent = detectedCooldownSeconds !== undefined
+      && detectedCooldownSeconds > 0
       && (cooldown.reliable !== false || !identityStrong);
     let hasOwnCooldownSignal = cooldownTextPresent;
+    const sequenceTransitionCandidate = this.tracking.armed
+      && nextSequenceMeasurement !== undefined
+      && nextSequenceMeasurement.similarity >= SEQUENCE_TRANSITION_MIN_SIMILARITY
+      && nextSequenceMeasurement.similarity >= measurement.similarity + SEQUENCE_TRANSITION_MARGIN;
+    this.tracking.sequenceTransitionFrames = sequenceTransitionCandidate
+      ? this.tracking.sequenceTransitionFrames + 1
+      : 0;
+    const sequenceTransitionConfirmed = this.tracking.sequenceTransitionFrames
+      >= SEQUENCE_TRANSITION_CONFIRM_FRAMES;
+    if (sequenceTransitionConfirmed) hasOwnCooldownSignal = true;
     const rolloverPrimeSeconds = configuredCooldownSeconds !== undefined
       ? Math.min(COOLDOWN_ROLLOVER_PRIME_SECONDS, Math.max(2, Math.ceil(configuredCooldownSeconds / 2)))
       : 2;
@@ -225,7 +268,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
     let cooldownRolloverUse = false;
 
     if (cooldownTextPresent) {
-      const observedSeconds = cooldown.seconds!;
+      const observedSeconds = detectedCooldownSeconds!;
       if (observedSeconds <= rolloverPrimeSeconds) {
         this.tracking.nearClearCooldownFrames++;
         this.tracking.cooldownRolloverPrimed = this.tracking.nearClearCooldownFrames >= 2;
@@ -258,8 +301,8 @@ export class DiagnosticAbilityReader implements AbilityReader {
     }
     if (cooldownTextPresent && !this.tracking.armed && !this.tracking.eventEmitted) {
       this.tracking.cooldownFloorSeconds = this.tracking.cooldownFloorSeconds
-        ? Math.min(this.tracking.cooldownFloorSeconds, cooldown.seconds!)
-        : cooldown.seconds!;
+        ? Math.min(this.tracking.cooldownFloorSeconds, detectedCooldownSeconds!)
+        : detectedCooldownSeconds!;
     }
     if (!cooldownTextPresent && identityStrong && !this.tracking.baselineBrightness) {
       rememberBrightness(this.tracking, measurement.brightness, BASELINE_SAMPLES);
@@ -288,7 +331,8 @@ export class DiagnosticAbilityReader implements AbilityReader {
       && !this.tracking.eventEmitted
       && measurement.similarity < 0.38
       && !cooldownTextPresent
-      && !gcdDarkening;
+      && !gcdDarkening
+      && !sequenceTransitionCandidate;
 
     if (identityLost) this.tracking.lowIdentityFrames++;
     else this.tracking.lowIdentityFrames = 0;
@@ -313,7 +357,9 @@ export class DiagnosticAbilityReader implements AbilityReader {
       this.tracking.cooldownFrames++;
       state = "cooldown-like";
 
-      if ((this.tracking.armed && this.tracking.cooldownFrames >= 2) || cooldownRolloverUse) {
+      if ((this.tracking.armed
+        && (this.tracking.cooldownFrames >= 2 || sequenceTransitionConfirmed))
+        || cooldownRolloverUse) {
         useEvent = true;
         this.useEventCount++;
         detectionLatencyMs = Math.round(performance.now() - this.tracking.cooldownStartedAt);
@@ -323,7 +369,10 @@ export class DiagnosticAbilityReader implements AbilityReader {
         this.tracking.nearClearCooldownFrames = 0;
         this.tracking.cooldownRolloverPrimed = false;
         this.tracking.cooldownRolloverFrames = 0;
-        message = cooldownRolloverUse
+        this.tracking.sequenceTransitionFrames = 0;
+        message = sequenceTransitionConfirmed && nextSequenceAbilityId
+          ? `Use detected from action-bar sequence advancing to ${abilityById.get(nextSequenceAbilityId)?.name ?? nextSequenceAbilityId}.`
+          : cooldownRolloverUse
           ? "Use detected from a confirmed cooldown reset."
           : visualCooldownConfirmed
             ? "Use detected from persistent slot cooldown visuals."
@@ -399,7 +448,7 @@ export class DiagnosticAbilityReader implements AbilityReader {
       brightnessRatio,
       gcdTransient,
       cooldownRawText: cooldown.rawText || undefined,
-      cooldownSeconds: cooldown.seconds,
+      cooldownSeconds: detectedCooldownSeconds,
       cooldownFrames: this.tracking.cooldownFrames,
       observationMs: Math.round((performance.now() - startedAt) * 10) / 10,
       useEvent,
@@ -469,6 +518,7 @@ type TrackingMemory = {
   cooldownRolloverPrimed: boolean;
   cooldownRolloverFrames: number;
   visualCooldownFrames: number;
+  sequenceTransitionFrames: number;
   lastCooldownSeconds?: number;
   cooldownFloorSeconds: number;
   cooldownStartedAt: number;
@@ -490,6 +540,7 @@ function freshTrackingMemory(abilityId = ""): TrackingMemory {
     cooldownRolloverPrimed: false,
     cooldownRolloverFrames: 0,
     visualCooldownFrames: 0,
+    sequenceTransitionFrames: 0,
     lastCooldownSeconds: undefined,
     cooldownFloorSeconds: 0,
     cooldownStartedAt: 0,

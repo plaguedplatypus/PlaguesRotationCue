@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const RELEASE_HISTORY: ReleaseNote[] = [
   {
+    version: "1.1.2",
+    title: "Sequence Abilities",
+    items: [
+      "Fixed an issue with Dismember's and Spectral Scythe's secondary casts breaking rotations.",
+    ]
+  },
+  {
     version: "1.1.1",
     title: "Ability/Item Picker",
     items: [
