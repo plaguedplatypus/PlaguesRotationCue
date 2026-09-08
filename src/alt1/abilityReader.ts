@@ -5,7 +5,7 @@ import type {
   ExpectedAbilityObservation,
   ExpectedTrackingState
 } from "../types";
-import { abilityById } from "../data/abilities";
+import { abilityById } from "../data/abilityData";
 import { IconMatcher, type IconMatch } from "./iconMatcher";
 import {
   clearActionBarGeometry,

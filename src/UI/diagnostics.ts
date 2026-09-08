@@ -1,4 +1,4 @@
-import { abilityById, rotationEntryById } from "../data/abilities";
+import { abilityById, rotationEntryById } from "../data/abilityData";
 import type { AbilityScanResult, DetectedSlot, ExpectedAbilityObservation } from "../types";
 
 export interface DiagnosticsViewState {

@@ -1,4 +1,4 @@
-import { rotationEntryById } from "../data/abilities";
+import { rotationEntryById } from "../data/abilityData";
 import { rotationCategories } from "./storage";
 import type { Rotation, RotationCategory } from "../types";
 

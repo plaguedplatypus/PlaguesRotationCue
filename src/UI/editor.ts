@@ -3,8 +3,8 @@ import {
   pickerSectionDefinition,
   pickerSectionsForCategory,
   rotationEntryById
-} from "../data/abilities";
-import type { PickerSectionId, RotationCatalogEntry } from "../data/abilities";
+} from "../data/abilityData";
+import type { PickerSectionId, RotationCatalogEntry } from "../data/abilityData";
 import {
   loadCollapsedRotationIds,
   saveCollapsedRotationIds

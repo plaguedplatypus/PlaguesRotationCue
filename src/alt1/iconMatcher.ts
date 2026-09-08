@@ -1,4 +1,4 @@
-import { abilities } from "../data/abilities";
+import { abilities } from "../data/abilityData";
 
 export type IconMatch = {
   abilityId: string;

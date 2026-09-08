@@ -1,7 +1,7 @@
 import * as a1lib from "alt1/base";
 import { CurrentActionBarCueOverlay } from "../alt1/actionBar";
 import { DiagnosticAbilityReader } from "../alt1/abilityReader";
-import { abilityById } from "../data/abilities";
+import { abilityById } from "../data/abilityData";
 import { RotationEngine } from "../rotation/engine";
 import type { AppState } from "../state";
 import type { AbilityScanResult, ExpectedAbilityObservation, ScreenPoint } from "../types";

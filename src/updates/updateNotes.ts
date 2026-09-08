@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const RELEASE_HISTORY: ReleaseNote[] = [
   {
+    version: "1.1.1",
+    title: "Ability/Item Picker",
+    items: [
+      "Added additional prayers and items to the Ability Picker.",
+    ]
+  },
+  {
     version: "1.1.0",
     title: "Keybind Visuals",
     items: [

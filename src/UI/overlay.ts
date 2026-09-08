@@ -1,5 +1,5 @@
 import { encodeImageString } from "alt1/base";
-import { rotationEntryById } from "../data/abilities";
+import { rotationEntryById } from "../data/abilityData";
 import type { CueItem, ScreenPoint } from "../types";
 import { cueKeybindSequence, type VisualKeybinds } from "./keybind";
 

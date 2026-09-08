@@ -1,4 +1,4 @@
-import { rotationEntryById } from "../data/abilities";
+import { rotationEntryById } from "../data/abilityData";
 import type { AbilityScanResult, DetectedSlot } from "../types";
 
 const KEYBINDS_KEY = "rotation-cue.visual-keybinds.v1";
@@ -31,7 +31,7 @@ export function cueKeybindSequence(
   if (!entry || !keybind || entry.pickerSection === "item" || entry.pickerSection === "cue") {
     return ["Alt+1"];
   }
-  return autoAdvance && entry.cooldownSeconds !== undefined
+  return autoAdvance && entry.cooldown !== undefined
     ? [keybind]
     : [keybind, "Alt+1"];
 }

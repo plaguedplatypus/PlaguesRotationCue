@@ -1,4 +1,4 @@
-import { abilityById } from "../data/abilities";
+import { abilityById } from "../data/abilityData";
 import type { Rotation, RotationCategory } from "../types";
 
 const STORAGE_KEY = "rotation-cue.rotations.v1";
