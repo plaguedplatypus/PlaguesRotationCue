@@ -31,7 +31,7 @@ export function cueKeybindSequence(
   if (!entry || !keybind || entry.pickerSection === "item" || entry.pickerSection === "cue") {
     return ["Alt+1"];
   }
-  return autoAdvance && entry.cooldown !== undefined
+  return autoAdvance && entry.cooldownSeconds !== undefined
     ? [keybind]
     : [keybind, "Alt+1"];
 }

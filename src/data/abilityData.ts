@@ -15,7 +15,7 @@ export interface RotationCatalogEntry {
   icon: string;
   pickerSection: PickerSectionId;
   style?: AbilityStyle;
-  cooldown?: number;
+  cooldownSeconds?: number;
   scannable: boolean;
 }
 
@@ -46,7 +46,7 @@ const derivedCatalog = CATALOG_SECTIONS.flatMap((section) => section.entries.map
   icon: entry.icon ?? `./assets/${section.assetDirectory}/${entry.id}.png`,
   pickerSection: section.pickerSection,
   style: entry.style ?? section.style,
-  cooldown: entry.cooldown,
+  cooldownSeconds: entry.cooldownSeconds,
   scannable: entry.scannable ?? section.defaultScannable ?? false,
   catalogSectionId: section.id,
   categories: section.categories
@@ -64,22 +64,22 @@ function runtimeEntry(entry: typeof derivedCatalog[number]): RotationCatalogEntr
     icon: entry.icon,
     pickerSection: entry.pickerSection,
     style: entry.style,
-    cooldown: entry.cooldown,
+    cooldownSeconds: entry.cooldownSeconds,
     scannable: entry.scannable
   };
 }
 
-// Preserve the Beta runtime collection: item and cue entries remain rotation-only.
+// Scannable catalog metadata is the single source of truth for scanner templates.
 const abilityCatalog = derivedCatalog
-  .filter((entry) => entry.pickerSection !== "item" && entry.pickerSection !== "cue")
+  .filter((entry) => entry.scannable)
   .sort(compareNames);
 
 export const abilities: AbilityDefinition[] = abilityCatalog.map((entry) => ({
   id: entry.id,
   name: entry.name,
-  style: entry.style!,
+  style: entry.style ?? "Utility",
   icon: entry.icon,
-  cooldown: entry.cooldown
+  cooldownSeconds: entry.cooldownSeconds
 }));
 
 export const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
