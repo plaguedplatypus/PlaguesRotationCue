@@ -44,7 +44,7 @@ export function renderEditor(
   container.replaceChildren();
 
   const library = document.createElement("section");
-  library.className = "rotation-library-controls";
+  library.className = "rotation-toolbar";
 
   const tabs = document.createElement("nav");
   tabs.className = "combat-tabs";
@@ -59,7 +59,7 @@ export function renderEditor(
   });
 
   const header = document.createElement("div");
-  header.className = "rotation-library-heading";
+  header.className = "rotation-library-header";
   const title = document.createElement("div");
   title.innerHTML = `<strong>Rotation library</strong><small>${labels[state.category]}</small>`;
   const addRotation = document.createElement("button");
@@ -72,7 +72,7 @@ export function renderEditor(
   library.append(tabs, header);
 
   const list = document.createElement("div");
-  list.className = "rotation-library-scroll";
+  list.className = "rotation-list";
   container.append(library, list);
 
   const rotations = state.rotations.filter((rotation) => rotation.category === state.category);
@@ -107,7 +107,7 @@ function rotationCard(
   card.className = `rotation-card${active ? " is-active" : ""}`;
 
   const header = document.createElement("div");
-  header.className = "rotation-card-heading";
+  header.className = "rotation-card-header";
   const collapse = iconBtn(isCollapsed ? "▸" : "▾", isCollapsed ? "Expand rotation" : "Collapse rotation", () => {
     if (isCollapsed) collapsed.delete(rotation.id);
     else collapsed.add(rotation.id);
@@ -161,7 +161,7 @@ function rotationCard(
   const count = document.createElement("span");
   count.textContent = `${rotation.steps.length} ${rotation.steps.length === 1 ? "ability" : "abilities"}`;
   const actions = document.createElement("div");
-  actions.className = "rotation-file-actions";
+  actions.className = "rotation-tools";
   const scan = textBtn(context.scanning ? "Scanning…" : "Scan", context.onScan);
   scan.classList.add("rotation-scan-button");
   scan.disabled = !context.canScan || context.scanning;
@@ -200,7 +200,7 @@ function rotationCard(
   card.append(sequence);
 
   const footer = document.createElement("div");
-  footer.className = "rotation-card-footer";
+  footer.className = "rotation-footer";
   const addAbility = document.createElement("button");
   addAbility.type = "button";
   addAbility.className = "compact-button is-primary";
@@ -211,7 +211,7 @@ function rotationCard(
   addStep.className = "compact-button";
   addStep.textContent = "+ Add Step";
   addStep.disabled = true;
-  addStep.title = "Additional step types are not part of Rotation Cue Beta yet.";
+  addStep.title = "Additional steps are not available yet.";
   footer.append(addAbility, addStep);
   card.append(footer);
 
@@ -235,7 +235,7 @@ function deletePrompt(
   modal.setAttribute("aria-describedby", "rotation-delete-message");
 
   const heading = document.createElement("header");
-  heading.className = "settings-modal-heading";
+  heading.className = "settings-modal-header";
   const title = document.createElement("h2");
   title.id = "rotation-delete-title";
   title.textContent = "Delete rotation?";
@@ -249,7 +249,7 @@ function deletePrompt(
   const message = document.createElement("p");
   message.className = "rotation-delete-message";
   message.id = "rotation-delete-message";
-  message.textContent = `Delete “${rotation.name}”? This cannot be undone.`;
+  message.textContent = `Delete “${rotation.name}”?`;
 
   const actions = document.createElement("div");
   actions.className = "rotation-delete-actions";
@@ -352,7 +352,7 @@ function pickerView(rotation: Rotation, state: State, context: EditorContext): H
   const panel = document.createElement("section");
   panel.className = "ability-picker";
   const header = document.createElement("div");
-  header.className = "ability-picker-heading";
+  header.className = "ability-picker-header";
   const title = document.createElement("strong");
   title.textContent = `Edit Step ${(picker?.replaceIndex ?? 0) + 1}`;
   const close = iconBtn("×", "Close ability picker", () => {
@@ -387,7 +387,7 @@ function pickerView(rotation: Rotation, state: State, context: EditorContext): H
     })));
     if (!matches.length) {
       const empty = document.createElement("p");
-      empty.className = "picker-empty";
+      empty.className = "ability-picker-empty";
       empty.textContent = `No matching ${pickerDef(selectedFilter, rotation.category).label}.`;
       results.append(empty);
     }

@@ -22,7 +22,7 @@ export function panelMarkup(state: PanelState): string {
     <details class="diagnostics-panel" ${state.open ? "open" : ""} ${state.visible ? "" : "hidden"}>
       <summary>
         <span><b>Diagnostics</b><small>${statusText(state)}</small></span>
-        <span class="details-chevron">▾</span>
+        <span class="diagnostics-chevron">▾</span>
       </summary>
       <div class="diagnostics-body">${bodyMarkup(state)}</div>
     </details>`;
@@ -30,9 +30,9 @@ export function panelMarkup(state: PanelState): string {
 
 export function bodyMarkup(state: ViewState): string {
   return `
-    <div class="diagnostics-heading">
+    <div class="diagnostics-header">
       <div><p class="section-kicker">DIAGNOSTICS</p><h2 id="diagnostics-heading">Action-bar detection</h2></div>
-      <button class="button button-accent" id="scan-action-bars" type="button" ${!state.alt1Available || state.scanning ? "disabled" : ""}>${state.scanning ? "Scanning…" : "Full scan"}</button>
+      <button class="button is-accent" id="scan-action-bars" type="button" ${!state.alt1Available || state.scanning ? "disabled" : ""}>${state.scanning ? "Scanning…" : "Full scan"}</button>
     </div>
     ${markup(state)}`;
 }
@@ -43,16 +43,16 @@ export function statusText(state: Pick<ViewState, "trackingEnabled" | "alt1Avail
 
 function markup(state: ViewState): string {
   if (state.scanning) {
-    return `<div class="diagnostics-empty"><span class="scan-pulse"></span><p>Locating visible bars and comparing slot icons…</p></div>`;
+    return `<div class="diagnostics-empty"><span class="diagnostics-scan-pulse"></span><p>Locating visible bars and comparing slot icons…</p></div>`;
   }
 
   const discovery = !state.result
     ? `<div class="diagnostics-empty"><p>${state.alt1Available
-      ? "Run a full discovery scan with the RuneScape action bars visible and unobstructed."
-      : "RuneScape capture is unavailable in normal browser mode. Manual rotation controls remain available."}</p></div>`
+      ? "Run a full discovery scan with the action bars visible and unobstructed."
+      : "Capture is unavailable. Manual rotation controls remain available."}</p></div>`
     : `
       <p class="diagnostics-message diagnostics-${state.result.availability}">${escapeHtml(state.result.message)}</p>
-      <div class="diagnostic-metrics">
+      <div class="diagnostics-metrics">
         <div><strong>${state.result.barsFound}</strong><span>Bars found</span></div>
         <div><strong>${state.result.slotsFound}</strong><span>Slots captured</span></div>
         <div><strong>${state.result.recognized}</strong><span>Recognized</span></div>
@@ -61,19 +61,19 @@ function markup(state: ViewState): string {
         <div><strong>${state.result.durationMs}<small> ms</small></strong><span>Scan time</span></div>
       </div>`;
 
-  const visibleRows = state.result?.slots.map(slotRow).join("") ?? "";
+  const rows = state.result?.slots.map(slotRow).join("") ?? "";
   return `
     ${discovery}
     ${trackingCard(state, Boolean(state.result?.recognized))}
-    ${visibleRows ? `<div class="detected-list" role="list">${visibleRows}</div>` : ""}
+    ${rows ? `<div class="detected-list" role="list">${rows}</div>` : ""}
   `;
 }
 
-function trackingCard(state: ViewState, hasDiscovery: boolean): string {
+function trackingCard(state: ViewState, discovered: boolean): string {
   const entry = state.expectedAbilityId ? entryById.get(state.expectedAbilityId) : undefined;
   const ability = state.expectedAbilityId ? abilityById.get(state.expectedAbilityId) : undefined;
   const trackingState = state.observation?.state ?? (state.trackingEnabled ? "acquiring-baseline" : "unavailable");
-  const canTrack = state.alt1Available && hasDiscovery && Boolean(ability);
+  const canTrack = state.alt1Available && discovered && Boolean(ability);
   const cooldownRaw = state.observation?.cooldownText || "—";
   const cooldownSeconds = state.observation?.cooldown !== undefined
     ? `${state.observation.cooldown} s`
@@ -96,7 +96,7 @@ function trackingCard(state: ViewState, hasDiscovery: boolean): string {
     ? `${state.currentStepIndex + 1} / ${state.rotationStepCount}`
     : "—";
   const message = state.observation?.message ?? (canTrack
-    ? "Start the harness, establish a ready baseline, then use the expected ability in RuneScape."
+    ? "Start the harness, establish a ready baseline, then use the expected ability."
     : entry && !entry.scannable
       ? "This reminder advances manually."
       : state.alt1Available
@@ -105,7 +105,7 @@ function trackingCard(state: ViewState, hasDiscovery: boolean): string {
 
   return `
     <article class="tracking-card">
-      <div class="tracking-heading">
+      <div class="tracking-header">
         <div>
           <p class="section-kicker">EXPECTED-ABILITY HARNESS</p>
           <div class="expected-ability">
@@ -131,7 +131,7 @@ function trackingCard(state: ViewState, hasDiscovery: boolean): string {
         <div><strong>${latency}</strong><span>Last latency</span></div>
       </div>
       <div class="tracking-controls">
-        <button class="button ${state.trackingEnabled ? "button-secondary" : "button-primary"}" id="toggle-tracking" type="button" ${!state.trackingEnabled && !canTrack ? "disabled" : ""}>${state.trackingEnabled ? "Stop tracking" : "Start tracking"}</button>
+        <button class="button ${state.trackingEnabled ? "is-secondary" : "is-primary"}" id="toggle-tracking" type="button" ${!state.trackingEnabled && !canTrack ? "disabled" : ""}>${state.trackingEnabled ? "Stop tracking" : "Start tracking"}</button>
       </div>
     </article>`;
 }
@@ -172,11 +172,11 @@ function slotRow(slot: DetectedSlot): string {
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (character) => ({
+  return value.replace(/[&<>'"]/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     "'": "&#39;",
     "\"": "&quot;"
-  })[character] as string);
+  })[char] as string);
 }

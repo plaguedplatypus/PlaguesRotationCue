@@ -59,7 +59,7 @@ export interface Sequence {
 }
 
 /*
-These are icons that occupy one physical action-bar slot and keybind.
+These icons occupy one physical action-bar slot and keybind.
 Only transitions caused by an activation belong in useTransitions; timeout resets should not advance cues.
 */
 export const sequences: readonly Sequence[] = [

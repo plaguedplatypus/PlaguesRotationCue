@@ -31,14 +31,6 @@ interface EntryContext {
   categories: CategoryScope;
 }
 
-const validCategories = new Set<Category>([
-  "melee",
-  "magic",
-  "ranged",
-  "necro",
-  "hybrid"
-]);
-
 validate();
 
 const entries = sections.flatMap((section) => section.entries.map((entry) => ({
@@ -223,7 +215,4 @@ function validate(): void {
 function validateScope(owner: string, categories: CategoryScope): void {
   if (categories === "all") return;
   if (!categories.length) throw new Error(`${owner} must include at least one category.`);
-  for (const category of categories) {
-    if (!validCategories.has(category)) throw new Error(`${owner} uses unknown category ${category}.`);
-  }
 }

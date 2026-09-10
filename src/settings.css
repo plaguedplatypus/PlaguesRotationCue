@@ -22,7 +22,7 @@
         url("./assets/bg.png") center / cover no-repeat;
 }
 
-.settings-modal-heading {
+.settings-modal-header {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -32,7 +32,7 @@
   background: rgba(0, 0, 0, 0.65);
 }
 
-.settings-modal-heading h2 {
+.settings-modal-header h2 {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -51,7 +51,7 @@
   white-space: nowrap;
 }
 
-.settings-version-label {
+.settings-version {
   color: inherit;
 }
 

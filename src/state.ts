@@ -47,9 +47,9 @@ export class State {
   }
 
   rename(rotationId: string, name: string): void {
-    const nextName = name.trim();
-    if (!nextName) return;
-    this.update(rotationId, (rotation) => ({ ...rotation, name: nextName }));
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.update(rotationId, (rotation) => ({ ...rotation, name: trimmed }));
   }
 
   remove(rotationId: string): void {
@@ -87,8 +87,7 @@ export class State {
     if (fromIndex < 0 || fromIndex >= rotation.steps.length || fromIndex === destination) return;
     const steps = [...rotation.steps];
     const [moved] = steps.splice(fromIndex, 1);
-    if (!moved) return;
-    steps.splice(destination, 0, moved);
+    steps.splice(destination, 0, moved!);
     this.update(rotationId, (current) => ({ ...current, steps }));
   }
 

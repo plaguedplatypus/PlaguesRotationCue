@@ -61,7 +61,7 @@ export class Reader implements ReaderApi {
     if (!window.alt1) {
       return emptyResult(
         "unavailable",
-        "Open Rotation Cue inside Alt1 to scan the RuneScape action bars.",
+        "Open Rotation Cue inside Alt1 to scan the action bars.",
         startedAt
       );
     }
@@ -73,14 +73,14 @@ export class Reader implements ReaderApi {
       clearGeometry();
       const screen = a1lib.captureHoldFullRs();
       if (!screen) {
-        return emptyResult("error", "RuneScape could not be captured.", startedAt);
+        return emptyResult("error", "Game could not be captured.", startedAt);
       }
 
       const bars = await this.locator.find(screen);
       if (!bars.length) {
         return emptyResult(
           "available",
-          "No visible RuneScape action bars were found.",
+          "No visible action bars were found.",
           startedAt
         );
       }
@@ -130,8 +130,7 @@ export class Reader implements ReaderApi {
               best = { match, capture };
             }
           }
-          if (!best) continue;
-          const { match, capture } = best;
+          const { match, capture } = best!;
           const slotResult: DetectedSlot = {
             barIndex: barIndex + 1,
             slotIndex: slot.index + 1,
@@ -237,7 +236,7 @@ export class Reader implements ReaderApi {
     const cooldown = readCooldown(capture, rect, {
       max: maxCooldown
     });
-    const identityOk = measurement.similarity >= 0.55;
+    const matched = measurement.similarity >= 0.55;
     // Hurricane's white center consistently OCRs as 3 or 7 while the icon is ready.
     const hurricaneArtifact = abilityId === "hurricane"
       && cooldown.seconds === hurricaneOcrSeconds
@@ -250,7 +249,7 @@ export class Reader implements ReaderApi {
       : cooldown.seconds;
     const hasCooldown = cooldownValue !== undefined
       && cooldownValue > 0
-      && (cooldown.reliable !== false || !identityOk);
+      && (cooldown.reliable !== false || !matched);
     let useSignal = hasCooldown;
     const stageChanged = this.tracking.armed
       && nextMeasurement !== undefined
@@ -308,7 +307,7 @@ export class Reader implements ReaderApi {
         ? Math.min(this.tracking.cooldownFloor, cooldownValue!)
         : cooldownValue!;
     }
-    if (!hasCooldown && identityOk && !this.tracking.baseline) {
+    if (!hasCooldown && matched && !this.tracking.baseline) {
       addBrightness(this.tracking, measurement.brightness, baselineSamples);
       if (this.tracking.readySamples.length >= baselineSamples) {
         const sorted = [...this.tracking.readySamples].sort((a, b) => a - b);
@@ -377,7 +376,7 @@ export class Reader implements ReaderApi {
         this.tracking.rolloverFrames = 0;
         this.tracking.sequenceFrames = 0;
         message = sequenceConfirmed && nextAbilityId
-          ? `Use detected from action-bar sequence advancing to ${abilityById.get(nextAbilityId)?.name ?? nextAbilityId}.`
+          ? `Use detected from action-bar sequence advancing to ${abilityById.get(nextAbilityId)!.name}.`
           : rolloverUse
           ? "Use detected from a confirmed cooldown reset."
           : visualConfirmed
@@ -401,7 +400,7 @@ export class Reader implements ReaderApi {
         message = gcdTransient
           ? `GCD-like darkening at ${Math.round(brightnessRatio * 100)}% of ready brightness; ignored.`
           : "Brightness has remained low too long to classify as a GCD; waiting for cooldown text or recovery.";
-      } else if (identityOk) {
+      } else if (matched) {
         this.tracking.gcdFrames = 0;
         const brightnessReady = !this.tracking.baseline
           || measurement.brightness >= this.tracking.baseline * 0.82;
@@ -440,7 +439,7 @@ export class Reader implements ReaderApi {
       } else {
         this.tracking.readyFrames = 0;
         state = "transient";
-        message = "Icon changed without persistent cooldown evidence; ignoring transient state.";
+        message = "Icon changed without cooldown evidence; ignoring transient state.";
       }
     }
 

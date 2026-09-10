@@ -82,16 +82,16 @@ export function modalMarkup(
       </div>`
     : `<p class="visual-keybind-empty">${result
       ? "No bindable abilities were found. Scan the action bars again."
-      : "Scan the action bars to load fields for the detected abilities."}</p>`;
+      : "Scan the action bars to load the detected abilities."}</p>`;
 
   const status = result
     ? `${result.barsFound} bar${result.barsFound === 1 ? "" : "s"} · ${recognized.length} bindable abilit${recognized.length === 1 ? "y" : "ies"}`
     : "No action-bar scan available";
 
   return `
-    <div class="settings-backdrop" id="keybinds-backdrop">
+    <div class="settings-backdrop" id="visual-keybind-backdrop">
       <section class="settings-modal visual-keybind-modal" role="dialog" aria-modal="true" aria-labelledby="visual-keybind-title">
-        <header class="settings-modal-heading">
+        <header class="settings-modal-header">
           <h2 id="visual-keybind-title">Visual Keybinds</h2>
           <button class="settings-modal-close" id="close-visual-keybinds" type="button" title="Back to settings" aria-label="Back to settings">x</button>
         </header>
@@ -167,7 +167,7 @@ function rowMarkup(slot: DetectedSlot, keybinds: Keybinds): string {
   const value = keybinds[bindId] ?? keybinds[abilityId] ?? "";
   const sequence = sequenceFor(abilityId);
   const name = sequence
-    ? `${entryById.get(sequence[0])?.name ?? sequence[0]} sequence`
+    ? `${entryById.get(sequence[0])!.name} sequence`
     : entry?.name ?? abilityId;
   const icon = entry?.icon
     ? `<img src="${escapeHtml(entry.icon)}" alt="">`
@@ -239,11 +239,11 @@ function baseKey(event: KeyboardEvent): string {
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (character) => ({
+  return value.replace(/[&<>'"]/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     "'": "&#39;",
     "\"": "&quot;"
-  })[character] as string);
+  })[char] as string);
 }

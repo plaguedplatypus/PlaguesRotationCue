@@ -90,9 +90,8 @@ export class Matcher {
     const ranked = [...scores.entries()]
       .map(([abilityId, score]) => ({ abilityId, score }))
       .sort((left, right) => right.score - left.score);
-    const best = ranked[0];
+    const best = ranked[0]!;
     const second = ranked[1];
-    if (!best) return reject("No icon candidates were produced");
 
     const score = clamp01(best.score);
     const secondScore = clamp01(second?.score ?? -1);

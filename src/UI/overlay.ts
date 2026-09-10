@@ -21,24 +21,24 @@ export class CueOverlay {
   private borderThickness = 2;
   private borderColor = "#f2c94c";
   private opacity = 1;
-  private showAbilityNames = true;
+  private showNames = true;
   private showNextLabel = true;
   private keybinds: Keybinds = {};
   private autoAdvance = true;
   private currentCooldown: { abilityId: string; seconds: number } | null = null;
-  private drawingPreview = false;
+  private previewing = false;
 
   async draw(cues: Cue[]): Promise<void> {
     await this.drawAt(cues, this.position, false);
   }
 
   async drawPreview(cues: Cue[], position: Point): Promise<void> {
-    if (this.drawingPreview) return;
-    this.drawingPreview = true;
+    if (this.previewing) return;
+    this.previewing = true;
     try {
       await this.drawAt(cues, position, true);
     } finally {
-      this.drawingPreview = false;
+      this.previewing = false;
     }
   }
 
@@ -82,8 +82,8 @@ export class CueOverlay {
   }
 
   setNames(show: boolean): void {
-    if (this.showAbilityNames === show) return;
-    this.showAbilityNames = show;
+    if (this.showNames === show) return;
+    this.showNames = show;
     this.lastSignature = "";
     this.lastDrawAt = 0;
   }
@@ -111,10 +111,10 @@ export class CueOverlay {
   }
 
   setCooldown(abilityId: string | null, seconds?: number): boolean {
-    const hasActiveCooldown = typeof seconds === "number"
+    const cooldownActive = typeof seconds === "number"
       && Number.isFinite(seconds)
       && seconds > 0;
-    const next = abilityId && hasActiveCooldown
+    const next = abilityId && cooldownActive
       ? { abilityId, seconds: Math.round(seconds) }
       : null;
     if (this.currentCooldown?.abilityId === next?.abilityId
@@ -139,7 +139,7 @@ export class CueOverlay {
     const cooldownSignature = this.currentCooldown
       ? `${this.currentCooldown.abilityId}:${this.currentCooldown.seconds}`
       : "ready";
-    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showAbilityNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}`;
+    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}`;
     if (!placementPreview && signature === this.lastSignature
       && Date.now() - this.lastDrawAt < overlayRefreshMs) return;
 
@@ -161,7 +161,7 @@ export class CueOverlay {
       ? Math.max(0, Math.ceil((badgeWidth - tileWidth) / 2) + this.borderThickness)
       : 0;
     const frameY = badgeWidth ? 19 : 0;
-    const tileHeight = frameY + frameSize + (this.showAbilityNames ? 10 : 0);
+    const tileHeight = frameY + frameSize + (this.showNames ? 10 : 0);
     const cueStripWidth = cues.length
       ? cues.length * tileWidth + (cues.length - 1) * gap
       : tileWidth * cueCount + (cueCount - 1) * gap;
@@ -174,7 +174,7 @@ export class CueOverlay {
 
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.scale(this.scale, this.scale);
-    const loadedIcons = await Promise.all(cues.map((cue) => {
+    const icons = await Promise.all(cues.map((cue) => {
       const icon = entryById.get(cue.step.abilityId)?.icon;
       return icon ? this.loadImage(icon) : Promise.resolve(null);
     }));
@@ -195,7 +195,7 @@ export class CueOverlay {
         cueIconSize + backgroundBorder * 2,
         cueIconSize + backgroundBorder * 2
       );
-      const icon = loadedIcons[index];
+      const icon = icons[index];
       if (icon) {
         context.drawImage(
           icon,
@@ -235,7 +235,7 @@ export class CueOverlay {
         drawArrow(context, x - gap / 2, cueFrameY + cueFrameSize / 2);
       }
 
-      if (this.showAbilityNames) {
+      if (this.showNames) {
         context.fillStyle = "#f2f5f7";
         context.font = "9px Arial";
         const label = this.fitLabel(context, ability?.name ?? cue.step.abilityId, tileWidth - 6);

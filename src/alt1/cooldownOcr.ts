@@ -284,8 +284,8 @@ function score(
   normalized: ParsedText,
   preference: number
 ): number {
-  const timerGlyphs = normalized.text.replace(/[:m]/g, "").length;
-  let score = 100 + preference + timerGlyphs * 3;
+  const glyphCount = normalized.text.replace(/[:m]/g, "").length;
+  let score = 100 + preference + glyphCount * 3;
   if (normalized.hasRealDigit) score += 10;
   if (/^\d{1,2}:\d{2}$/.test(normalized.text)) score += 8;
   if (/^\d{1,2}m$/.test(normalized.text)) score += 4;

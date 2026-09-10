@@ -77,10 +77,10 @@ export function modalMarkup(settings: Settings, positioning = false): string {
   return `
     <div class="settings-backdrop" id="settings-backdrop">
       <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header class="settings-modal-heading">
+        <header class="settings-modal-header">
           <h2 id="settings-title">Settings</h2>
           <div class="settings-release-links">
-            <span class="settings-version-label">v${appVersion}</span>
+            <span class="settings-version">v${appVersion}</span>
             <button class="settings-patch-notes" id="show-patch-notes" type="button" title="Show Patch Notes">Patch Notes</button>
           </div>
           <button class="settings-modal-close" id="close-settings" type="button" title="Close settings" aria-label="Close settings">x</button>
@@ -99,17 +99,17 @@ export function modalMarkup(settings: Settings, positioning = false): string {
                 ${!settings.showCueOverlay || positioning ? "disabled" : ""}>${positioning ? "Waiting for Alt+1" : "Reposition Overlay"}</button>
             </div>
             <p class="settings-hint" id="settings-overlay-position-status">${positioning
-              ? "Move the preview with your cursor, then press Alt+1."
+              ? "Move the preview where you want, then press Alt+1."
               : settings.overlayPosition ? "Custom position saved." : "Using the default position."}</p>
             ${rangeRow("Cue scale", "settings-cue-scale", 55, 100, 5, settings.cueScale, "%")}
-            ${selectRow("Number of upcoming abilities", "settings-upcoming", ["1", "2", "3", "4"], String(settings.upcomingAbilities))}
+            ${selectRow("Shown Abilities", "settings-upcoming-count", ["1", "2", "3", "4"], String(settings.upcomingAbilities))}
             ${rangeRow("Border thickness", "settings-border-thickness", 0, 3, 1, settings.cueBorderThickness, "px")}
             ${colorRow("Border color", "settings-border-color", settings.cueBorderColor)}
-            ${toggleRow("Use 50% overlay opacity", "settings-overlay-opacity", settings.overlayOpacity === 50)}
+            ${toggleRow("50% opacity", "settings-overlay-opacity", settings.overlayOpacity === 50)}
             ${toggleRow("Show ability names", "settings-show-ability-names", settings.showAbilityNames)}
-            ${toggleRow("Show keybind visual", "settings-show-next-label", settings.showNextLabel)}
+            ${toggleRow("Show keybind Visuals", "settings-show-next-label", settings.showNextLabel)}
             <div class="settings-row">
-              <span class="settings-label">Set Visual Keybinds</span>
+              <span class="settings-label">Set Keybind Visuals</span>
               <button class="settings-action" id="settings-visual-keybinds" type="button">Keybinds</button>
             </div>
           `)}

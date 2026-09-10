@@ -322,7 +322,7 @@ export function mountApp(root: HTMLElement, state: State): void {
     const status = root.querySelector<HTMLElement>("#settings-overlay-position-status");
     if (status) {
       status.textContent = message ?? (placingOverlay
-        ? "Move the preview with your cursor, then press Alt+1."
+        ? "Move the preview, then press Alt+1."
         : settings.overlayPosition ? "Custom position saved." : "Using the default position.");
     }
   };
@@ -361,7 +361,7 @@ export function mountApp(root: HTMLElement, state: State): void {
       if (!position) {
         stopPlacement(false);
         cueOverlay.clear();
-        updatePlacement("Could not read the RuneScape cursor position. Please try again.");
+        updatePlacement("Could not read the cursor position. Please try again.");
         return;
       }
 
@@ -433,7 +433,7 @@ export function mountApp(root: HTMLElement, state: State): void {
         : ""}
     `;
 
-    renderEditor(requiredElement(root, "#rotation-editor"), state, {
+    renderEditor(requireElement(root, "#rotation-editor"), state, {
       currentIndex: engine.currentIndex(),
       canScan: isAlt1Available(),
       scanning,
@@ -492,7 +492,7 @@ export function mountApp(root: HTMLElement, state: State): void {
         root.querySelector<HTMLButtonElement>("#settings-visual-keybinds")?.focus();
       };
       root.querySelector("#close-visual-keybinds")?.addEventListener("click", returnToSettings);
-      root.querySelector("#keybinds-backdrop")?.addEventListener("click", (event) => {
+      root.querySelector("#visual-keybind-backdrop")?.addEventListener("click", (event) => {
         if (event.target === event.currentTarget) returnToSettings();
       });
       root.querySelector("#scan-visual-keybinds")?.addEventListener("click", () => {
@@ -546,7 +546,7 @@ export function mountApp(root: HTMLElement, state: State): void {
         void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
-    root.querySelector<HTMLSelectElement>("#settings-upcoming")?.addEventListener("change", (event) => {
+    root.querySelector<HTMLSelectElement>("#settings-upcoming-count")?.addEventListener("change", (event) => {
       const count = Number((event.currentTarget as HTMLSelectElement).value);
       settings = { ...settings, upcomingAbilities: count };
       saveSettings(settings);
@@ -679,18 +679,18 @@ function cleanPoint(value: unknown): Point | null {
     : null;
 }
 
-function requiredElement(root: HTMLElement, selector: string): HTMLElement {
+function requireElement(root: HTMLElement, selector: string): HTMLElement {
   const element = root.querySelector<HTMLElement>(selector);
   if (!element) throw new Error(`Missing UI element: ${selector}`);
   return element;
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (character) => ({
+  return value.replace(/[&<>'"]/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     "'": "&#39;",
     "\"": "&quot;"
-  })[character] as string);
+  })[char] as string);
 }

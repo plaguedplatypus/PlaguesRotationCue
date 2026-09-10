@@ -6,7 +6,7 @@
   --line: #4a4030;
   --line-soft: #302c25;
   --bg: #0e1d25;
-  --bg2: #0c1418;
+  --body-bg: #0c1418;
   --gold: #d8c58a;
   --gold-bright: #d9a441;
   --gold-dark: #5a4a2a;
@@ -40,7 +40,7 @@ body {
 }
 
 body {
-  background-color: var(--bg2);
+  background-color: var(--body-bg);
   background-image: linear-gradient(rgba(7, 15, 19, .9), rgba(7, 15, 19, .94)), var(--rotation-cue-background);
   background-position: center;
   background-size: cover;
@@ -217,14 +217,14 @@ button:disabled {
   color: #ffdcdc;
 }
 
-.rotation-library-controls {
+.rotation-toolbar {
   flex: 0 0 auto;
   min-width: 0;
   padding-top: 5px;
   background: rgba(5, 12, 15, .58);
 }
 
-.rotation-library-scroll {
+.rotation-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -255,7 +255,7 @@ button:disabled {
   color: #fff2aa;
 }
 
-.rotation-library-heading {
+.rotation-library-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -269,20 +269,20 @@ button:disabled {
   color: #fff1bd;
 }
 
-.rotation-library-heading>div {
+.rotation-library-header>div {
   display: flex;
   align-items: baseline;
   gap: 7px;
   min-width: 0;
 }
 
-.rotation-library-heading strong {
+.rotation-library-header strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rotation-library-heading small {
+.rotation-library-header small {
   color: #cabd98;
   font-size: 10px;
   text-transform: uppercase;
@@ -346,7 +346,7 @@ button:disabled {
   border-left-color: var(--cyan);
 }
 
-.rotation-card-heading {
+.rotation-card-header {
   display: grid;
   grid-template-columns: 24px 20px 20px minmax(0, 1fr) auto 24px;
   align-items: center;
@@ -358,12 +358,12 @@ button:disabled {
   background: rgba(27, 30, 24, 0.8);
 }
 
-.rotation-card.is-active .rotation-card-heading {
+.rotation-card.is-active .rotation-card-header {
   border-bottom-color: #376575;
   background: linear-gradient(#1b2d34, #132228);
 }
 
-.rotation-card-heading .compact-button {
+.rotation-card-header .compact-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -395,8 +395,8 @@ button:disabled {
   min-width: 28px;
 }
 
-.rotation-card-heading>.icon-button:nth-child(2),
-.rotation-card-heading>.icon-button:nth-child(3) {
+.rotation-card-header>.icon-button:nth-child(2),
+.rotation-card-header>.icon-button:nth-child(3) {
   width: 20px;
   min-width: 20px;
   height: 22px;
@@ -431,7 +431,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.rotation-file-actions {
+.rotation-tools {
   grid-column: 3;
   display: flex;
   gap: 3px;
@@ -548,7 +548,7 @@ button:disabled {
   display: grid;
 }
 
-.rotation-card-footer {
+.rotation-footer {
   display: flex;
   gap: 4px;
   margin-top: 5px;
@@ -571,7 +571,7 @@ button:disabled {
   box-shadow: 0 2px 10px rgba(0, 0, 0, .65);
 }
 
-.ability-picker-heading {
+.ability-picker-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -664,7 +664,7 @@ button:disabled {
   color: var(--gold-bright);
 }
 
-.picker-empty {
+.ability-picker-empty {
   grid-column: 1/-1;
   color: var(--muted);
   text-align: center;
@@ -715,11 +715,11 @@ button:disabled {
   white-space: nowrap;
 }
 
-.details-chevron {
+.diagnostics-chevron {
   color: var(--gold-bright);
 }
 
-.diagnostics-panel[open] .details-chevron {
+.diagnostics-panel[open] .diagnostics-chevron {
   transform: rotate(180deg);
 }
 
@@ -733,24 +733,24 @@ button:disabled {
   padding: 3px 8px;
 }
 
-.button-primary {
+.button.is-primary {
   border-color: var(--gold-bright);
   background: linear-gradient(#4a3518, #20170c);
   color: #fff2c8;
 }
 
-.button-secondary,
-.button-accent {
+.button.is-secondary,
+.button.is-accent {
   background: linear-gradient(#262626, #1e1e1e);
 }
 
-.button-accent {
+.button.is-accent {
   border-color: var(--gold-bright);
   color: #fff2c8;
 }
 
-.diagnostics-heading,
-.tracking-heading {
+.diagnostics-header,
+.tracking-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -794,7 +794,7 @@ h3 {
   padding: 6px;
 }
 
-.scan-pulse {
+.diagnostics-scan-pulse {
   width: 7px;
   height: 7px;
   margin-top: 6px;
@@ -814,7 +814,7 @@ h3 {
   border-color: var(--red);
 }
 
-.diagnostic-metrics,
+.diagnostics-metrics,
 .tracking-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -822,7 +822,7 @@ h3 {
   border: 1px solid var(--line-soft);
 }
 
-.diagnostic-metrics div,
+.diagnostics-metrics div,
 .tracking-metrics div {
   display: grid;
   gap: 1px;
@@ -832,7 +832,7 @@ h3 {
   border-bottom: 1px solid var(--line-soft);
 }
 
-.diagnostic-metrics strong,
+.diagnostics-metrics strong,
 .tracking-metrics strong {
   overflow: hidden;
   font-size: 12px;
@@ -840,7 +840,7 @@ h3 {
   white-space: nowrap;
 }
 
-.diagnostic-metrics span,
+.diagnostics-metrics span,
 .tracking-metrics span {
   color: var(--muted);
   font-size: 9px;
@@ -919,7 +919,7 @@ h3 {
   overflow-y: auto;
 }
 
-.rotation-library-scroll,
+.rotation-list,
 .ability-results,
 .diagnostics-panel[open],
 .detected-list {
@@ -1173,23 +1173,23 @@ h3 {
 
 @media (max-width: 300px) {
   /* Alt1 can collapse to title-bar width, so keep every card action reachable. */
-  .rotation-card-heading {
+  .rotation-card-header {
     grid-template-columns: 24px 20px 20px minmax(0, 1fr) 24px 24px;
   }
 
-  .rotation-card-heading .compact-button {
+  .rotation-card-header .compact-button {
     width: 24px;
     padding: 0;
     overflow: hidden;
     font-size: 0;
   }
 
-  .rotation-card-heading .compact-button::after {
+  .rotation-card-header .compact-button::after {
     content: "A";
     font-size: 11px;
   }
 
-  .rotation-card-heading .compact-button.is-active::after {
+  .rotation-card-header .compact-button.is-active::after {
     content: "D";
   }
 }
