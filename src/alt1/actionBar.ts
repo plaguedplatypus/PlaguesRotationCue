@@ -1,9 +1,9 @@
 import * as a1lib from "alt1/base";
 
-export type ModernActionBarLayout = "flat" | "grid" | "tower" | "vertical";
-export type ModernActionBarKind = "main" | "secondary";
+export type LayoutId = "flat" | "grid" | "tower" | "vertical";
+export type BarKind = "main" | "secondary";
 
-export interface ModernActionBarSlot {
+export interface Slot {
   x: number;
   y: number;
   width: 31;
@@ -11,152 +11,155 @@ export interface ModernActionBarSlot {
   index: number;
 }
 
-export interface ActionBarSlotLocation {
+export interface SlotLocation {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export interface ModernActionBar {
+export interface Bar {
   id: string;
-  kind: ModernActionBarKind;
-  layout: ModernActionBarLayout;
+  kind: BarKind;
+  layout: LayoutId;
   x: number;
   y: number;
-  structuralScore: number;
-  slots: ModernActionBarSlot[];
+  score: number;
+  slots: Slot[];
 }
 
-type LayoutSpec = {
-  id: ModernActionBarLayout;
+type Layout = {
+  id: LayoutId;
   columns: number;
   rows: number;
   pitchX: number;
   pitchY: number;
   order: "row" | "column";
   firstFromCog: { x: number; y: number };
-  firstFromMainAnchor: { x: number; y: number };
+  firstFromAnchor: { x: number; y: number };
   controlFromCog: { x: number; y: number };
 };
 
-const SLOT_SIZE = 31 as const;
-const MIN_STRUCTURE_SCORE = 0.86;
-const MAIN_ORIGIN_TOLERANCE = 5;
-const CONTROL_PAIR_TOLERANCE = 1;
+const slotSize = 31 as const;
+const minStructureScore = 0.86;
+const originTolerance = 5;
+const controlTolerance = 1;
 
-const LAYOUTS: readonly LayoutSpec[] = [
+// These offsets are measured from the action-bar cog to slot 1.
+const layouts: readonly Layout[] = [
   {
     id: "flat", columns: 14, rows: 1, pitchX: 36, pitchY: 0, order: "row",
     firstFromCog: { x: -505, y: -16 },
-    firstFromMainAnchor: { x: -126, y: 33 },
+    firstFromAnchor: { x: -126, y: 33 },
     controlFromCog: { x: -4, y: -17 }
   },
   {
     id: "grid", columns: 7, rows: 2, pitchX: 35, pitchY: 35, order: "row",
     firstFromCog: { x: -243, y: -52 },
-    firstFromMainAnchor: { x: -122, y: 52 },
+    firstFromAnchor: { x: -122, y: 52 },
     controlFromCog: { x: -4, y: -55 }
   },
   {
     id: "tower", columns: 2, rows: 7, pitchX: 35, pitchY: 35, order: "column",
     firstFromCog: { x: -52, y: -243 },
-    firstFromMainAnchor: { x: -71, y: -130 },
+    firstFromAnchor: { x: -71, y: -130 },
     controlFromCog: { x: -58, y: -1 }
   },
   {
     id: "vertical", columns: 1, rows: 14, pitchX: 0, pitchY: 36, order: "column",
     firstFromCog: { x: -16, y: -505 },
-    firstFromMainAnchor: { x: -39, y: -138 },
+    firstFromAnchor: { x: -39, y: -138 },
     controlFromCog: { x: -20, y: -1 }
   }
 ];
 
-type Anchors = { cog: ImageData; control: ImageData; mainAdrenaline: ImageData[] };
+type Anchors = { cog: ImageData; control: ImageData; adrenaline: ImageData[] };
 
-export class ModernActionBarLocator {
-  private anchorsPromise: Promise<Anchors> | null = null;
+export class Locator {
+  private anchorLoad: Promise<Anchors> | null = null;
 
-  async find(screen: a1lib.ImgRef): Promise<ModernActionBar[]> {
+  async find(screen: a1lib.ImgRef): Promise<Bar[]> {
     const anchors = await this.prepare();
-    const cogPositions = screen.findSubimage(anchors.cog);
-    const controlPositions = screen.findSubimage(anchors.control);
-    const mainPositions = anchors.mainAdrenaline.flatMap((anchor) => screen.findSubimage(anchor));
-    const candidates: ModernActionBar[] = [];
+    const cogs = screen.findSubimage(anchors.cog);
+    const controls = screen.findSubimage(anchors.control);
+    const mainAnchors = anchors.adrenaline.flatMap((anchor) => screen.findSubimage(anchor));
+    const bars: Bar[] = [];
 
-    for (const cog of cogPositions) {
-      const mainLayout = LAYOUTS.find((layout) => matchesMainFromCog(cog, layout, mainPositions));
+    for (const cog of cogs) {
+      // Only the main bar has the adrenaline anchor; detached bars rely on their cog.
+      const mainLayout = layouts.find((layout) => isMainBar(cog, layout, mainAnchors));
       if (mainLayout) {
-        const main = createCandidate(screen, cog, mainLayout, false);
+        const main = makeCandidate(screen, cog, mainLayout, false);
         if (main) {
           main.kind = "main";
-          if (!candidates.some((candidate) => candidate.kind === "main")) candidates.push(main);
+          if (!bars.some((bar) => bar.kind === "main")) bars.push(main);
           continue;
         }
       }
 
-      let best: ModernActionBar | null = null;
-      for (const layout of LAYOUTS) {
-        const candidate = createCandidate(screen, cog, layout);
+      let best: Bar | null = null;
+      for (const layout of layouts) {
+        const candidate = makeCandidate(screen, cog, layout);
         if (!candidate) continue;
-        if (!best || candidate.structuralScore > best.structuralScore) best = candidate;
+        if (!best || candidate.score > best.score) best = candidate;
       }
-      if (best && !candidates.some((candidate) => sameOrigin(candidate, best!))) {
-        candidates.push(best);
+      if (best && !bars.some((bar) => sameOrigin(bar, best!))) {
+        bars.push(best);
       }
     }
 
-    for (const candidate of candidates) {
-      if (candidate.kind === "main") continue;
-      const layout = LAYOUTS.find((entry) => entry.id === candidate.layout)!;
+    for (const bar of bars) {
+      if (bar.kind === "main") continue;
+      const layout = layouts.find((entry) => entry.id === bar.layout)!;
       const cog = {
-        x: candidate.x - layout.firstFromCog.x,
-        y: candidate.y - layout.firstFromCog.y
+        x: bar.x - layout.firstFromCog.x,
+        y: bar.y - layout.firstFromCog.y
       };
-      const correctedLayout = LAYOUTS.find((entry) => controlPositions.some((control) =>
-        Math.abs(control.x - (cog.x + entry.controlFromCog.x)) <= CONTROL_PAIR_TOLERANCE
-        && Math.abs(control.y - (cog.y + entry.controlFromCog.y)) <= CONTROL_PAIR_TOLERANCE
+      // The nearby control button confirms layouts with the same cog position.
+      const corrected = layouts.find((entry) => controls.some((control) =>
+        Math.abs(control.x - (cog.x + entry.controlFromCog.x)) <= controlTolerance
+        && Math.abs(control.y - (cog.y + entry.controlFromCog.y)) <= controlTolerance
       ));
-      if (correctedLayout) {
-        const corrected = createCandidate(screen, cog, correctedLayout);
-        if (corrected) {
-          candidate.layout = corrected.layout;
-          candidate.x = corrected.x;
-          candidate.y = corrected.y;
-          candidate.structuralScore = corrected.structuralScore;
-          candidate.slots = corrected.slots;
+      if (corrected) {
+        const candidate = makeCandidate(screen, cog, corrected);
+        if (candidate) {
+          bar.layout = candidate.layout;
+          bar.x = candidate.x;
+          bar.y = candidate.y;
+          bar.score = candidate.score;
+          bar.slots = candidate.slots;
         }
       }
-      candidate.kind = "secondary";
+      bar.kind = "secondary";
     }
 
-    candidates.sort((left, right) => {
+    bars.sort((left, right) => {
       if (left.kind !== right.kind) return left.kind === "main" ? -1 : 1;
       return left.y - right.y || left.x - right.x;
     });
-    let secondaryIndex = 0;
-    candidates.forEach((bar) => {
-      bar.id = bar.kind === "main" ? "main" : `secondary-${++secondaryIndex}`;
+    let secondary = 0;
+    bars.forEach((bar) => {
+      bar.id = bar.kind === "main" ? "main" : `secondary-${++secondary}`;
     });
-    return candidates;
+    return bars;
   }
 
   private prepare(): Promise<Anchors> {
-    this.anchorsPromise ??= Promise.all([
-      a1lib.imageDataFromUrl("./assets/anchors/modern-action-bar-cog.png"),
-      a1lib.imageDataFromUrl("./assets/anchors/modern-action-bar-control.png"),
-      a1lib.imageDataFromUrl("./assets/anchors/modern-main-adrenaline.png"),
-      a1lib.imageDataFromUrl("./assets/anchors/modern-main-adrenaline-sword.png")
+    this.anchorLoad ??= Promise.all([
+      a1lib.imageDataFromUrl("./assets/anchors/action-bar-cog.png"),
+      a1lib.imageDataFromUrl("./assets/anchors/action-bar-control.png"),
+      a1lib.imageDataFromUrl("./assets/anchors/main-adrenaline.png"),
+      a1lib.imageDataFromUrl("./assets/anchors/main-adrenaline-sword.png")
     ]).then(([cog, control, crossedSwords, singleSword]) => ({
       cog,
       control,
-      mainAdrenaline: [crossedSwords, singleSword]
+      adrenaline: [crossedSwords, singleSword]
     }));
-    return this.anchorsPromise;
+    return this.anchorLoad;
   }
 }
 
-export function clearActionBarGeometry(): void {
+export function clearGeometry(): void {
   const api = window.alt1;
   if (!api) return;
   api.overLaySetGroup("rotation-cue-action-bars");
@@ -164,7 +167,7 @@ export function clearActionBarGeometry(): void {
   api.overLayRefreshGroup("rotation-cue-action-bars");
 }
 
-export function showActionBarGeometry(bars: readonly ModernActionBar[], durationMs = 12000): void {
+export function showGeometry(bars: readonly Bar[], durationMs = 12000): void {
   const api = window.alt1;
   if (!api) return;
   const mainColor = a1lib.mixColor(54, 220, 255);
@@ -172,7 +175,7 @@ export function showActionBarGeometry(bars: readonly ModernActionBar[], duration
   api.overLaySetGroup("rotation-cue-action-bars");
   api.overLayFreezeGroup("rotation-cue-action-bars");
   api.overLayClearGroup("rotation-cue-action-bars");
-  let secondaryIndex = 0;
+  let secondary = 0;
   bars.forEach((bar) => {
     const color = bar.kind === "main" ? mainColor : secondaryColor;
     bar.slots.forEach((slot) => {
@@ -182,21 +185,21 @@ export function showActionBarGeometry(bars: readonly ModernActionBar[], duration
     });
     const label = bar.kind === "main"
       ? `Main (${bar.layout})`
-      : `Secondary ${++secondaryIndex} (${bar.layout})`;
+      : `Secondary ${++secondary} (${bar.layout})`;
     api.overLayText(label, color, 12, bar.x, Math.max(0, bar.y - 7), durationMs);
   });
   api.overLayRefreshGroup("rotation-cue-action-bars");
 }
 
-const CURRENT_CUE_GROUP = "rotation-cue-current-action-bar-slot";
-const CURRENT_CUE_LIFETIME_MS = 20_000;
-const CURRENT_CUE_REFRESH_MS = 10_000;
+const cueGroup = "rotation-cue-current-action-bar-slot";
+const cueLifetimeMs = 20_000;
+const cueRefreshMs = 10_000;
 
-export class CurrentActionBarCueOverlay {
+export class SlotOverlay {
   private lastSignature = "";
   private lastDrawAt = 0;
 
-  draw(location: ActionBarSlotLocation | null, borderColor: string, borderThickness: number): void {
+  draw(location: SlotLocation | null, borderColor: string, borderThickness: number): void {
     const api = window.alt1;
     if (!api) return;
     const thickness = Math.max(0, Math.min(3, Math.round(borderThickness)));
@@ -205,28 +208,28 @@ export class CurrentActionBarCueOverlay {
       return;
     }
 
-    const color = cleanOverlayColor(borderColor);
+    const color = cleanColor(borderColor);
     const signature = `${location.x}:${location.y}:${location.width}:${location.height}:${color}:${thickness}`;
     const now = Date.now();
-    if (signature === this.lastSignature && now - this.lastDrawAt < CURRENT_CUE_REFRESH_MS) return;
+    if (signature === this.lastSignature && now - this.lastDrawAt < cueRefreshMs) return;
 
     try {
-      api.overLaySetGroup(CURRENT_CUE_GROUP);
+      api.overLaySetGroup(cueGroup);
       const canContinue = typeof api.overLayFreezeGroup === "function"
         && typeof api.overLayContinueGroup === "function";
-      if (canContinue) api.overLayFreezeGroup(CURRENT_CUE_GROUP);
-      api.overLayClearGroup(CURRENT_CUE_GROUP);
+      if (canContinue) api.overLayFreezeGroup(cueGroup);
+      api.overLayClearGroup(cueGroup);
       api.overLayRect(
-        hexOverlayColor(color),
+        overlayColor(color),
         location.x - thickness,
         location.y - thickness,
         location.width + thickness * 2,
         location.height + thickness * 2,
-        CURRENT_CUE_LIFETIME_MS,
+        cueLifetimeMs,
         thickness
       );
-      if (canContinue) api.overLayContinueGroup(CURRENT_CUE_GROUP);
-      else api.overLayRefreshGroup(CURRENT_CUE_GROUP);
+      if (canContinue) api.overLayContinueGroup(cueGroup);
+      else api.overLayRefreshGroup(cueGroup);
       this.lastSignature = signature;
       this.lastDrawAt = now;
     } catch (error) {
@@ -237,9 +240,9 @@ export class CurrentActionBarCueOverlay {
   clear(): void {
     if (!window.alt1 || !this.lastSignature) return;
     try {
-      window.alt1.overLaySetGroup(CURRENT_CUE_GROUP);
-      window.alt1.overLayClearGroup(CURRENT_CUE_GROUP);
-      window.alt1.overLayRefreshGroup(CURRENT_CUE_GROUP);
+      window.alt1.overLaySetGroup(cueGroup);
+      window.alt1.overLayClearGroup(cueGroup);
+      window.alt1.overLayRefreshGroup(cueGroup);
     } catch {
     }
     this.lastSignature = "";
@@ -247,11 +250,11 @@ export class CurrentActionBarCueOverlay {
   }
 }
 
-function cleanOverlayColor(value: string): string {
+function cleanColor(value: string): string {
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#f2c94c";
 }
 
-function hexOverlayColor(value: string): number {
+function overlayColor(value: string): number {
   return a1lib.mixColor(
     Number.parseInt(value.slice(1, 3), 16),
     Number.parseInt(value.slice(3, 5), 16),
@@ -259,8 +262,8 @@ function hexOverlayColor(value: string): number {
   );
 }
 
-function createSlots(x: number, y: number, layout: LayoutSpec): ModernActionBarSlot[] {
-  const slots: ModernActionBarSlot[] = [];
+function getSlots(x: number, y: number, layout: Layout): Slot[] {
+  const slots: Slot[] = [];
   for (let index = 0; index < 14; index++) {
     const column = layout.order === "row"
       ? index % layout.columns
@@ -271,57 +274,57 @@ function createSlots(x: number, y: number, layout: LayoutSpec): ModernActionBarS
     slots.push({
       x: x + column * layout.pitchX,
       y: y + row * layout.pitchY,
-      width: SLOT_SIZE,
-      height: SLOT_SIZE,
+      width: slotSize,
+      height: slotSize,
       index
     });
   }
   return slots;
 }
 
-function createCandidate(
+function makeCandidate(
   screen: a1lib.ImgRef,
   cog: { x: number; y: number },
-  layout: LayoutSpec,
+  layout: Layout,
   requireStructure = true
-): ModernActionBar | null {
+): Bar | null {
   const x = cog.x + layout.firstFromCog.x;
   const y = cog.y + layout.firstFromCog.y;
-  const slots = createSlots(x, y, layout);
-  if (!slotsFitScreen(screen, slots)) return null;
-  const structuralScore = scoreStructure(screen, slots);
-  if (requireStructure && structuralScore < MIN_STRUCTURE_SCORE) return null;
+  const slots = getSlots(x, y, layout);
+  if (!fitsScreen(screen, slots)) return null;
+  const score = scoreLayout(screen, slots);
+  if (requireStructure && score < minStructureScore) return null;
   return {
     id: "",
     kind: "secondary",
     layout: layout.id,
     x,
     y,
-    structuralScore,
+    score,
     slots
   };
 }
 
-function matchesMainFromCog(
+function isMainBar(
   cog: { x: number; y: number },
-  layout: LayoutSpec,
+  layout: Layout,
   mainPositions: readonly { x: number; y: number }[]
 ): boolean {
   const candidateX = cog.x + layout.firstFromCog.x;
   const candidateY = cog.y + layout.firstFromCog.y;
   return mainPositions.some((anchor) =>
-    Math.abs(candidateX - (anchor.x + layout.firstFromMainAnchor.x)) <= MAIN_ORIGIN_TOLERANCE
-    && Math.abs(candidateY - (anchor.y + layout.firstFromMainAnchor.y)) <= MAIN_ORIGIN_TOLERANCE
+    Math.abs(candidateX - (anchor.x + layout.firstFromAnchor.x)) <= originTolerance
+    && Math.abs(candidateY - (anchor.y + layout.firstFromAnchor.y)) <= originTolerance
   );
 }
 
-function slotsFitScreen(screen: a1lib.ImgRef, slots: readonly ModernActionBarSlot[]): boolean {
+function fitsScreen(screen: a1lib.ImgRef, slots: readonly Slot[]): boolean {
   return slots.every((slot) => slot.x >= screen.x && slot.y >= screen.y
     && slot.x + slot.width <= screen.x + screen.width
     && slot.y + slot.height <= screen.y + screen.height);
 }
 
-function scoreStructure(screen: a1lib.ImgRef, slots: readonly ModernActionBarSlot[]): number {
+function scoreLayout(screen: a1lib.ImgRef, slots: readonly Slot[]): number {
   const left = Math.min(...slots.map((slot) => slot.x));
   const top = Math.min(...slots.map((slot) => slot.y));
   const right = Math.max(...slots.map((slot) => slot.x + slot.width));
@@ -332,26 +335,26 @@ function scoreStructure(screen: a1lib.ImgRef, slots: readonly ModernActionBarSlo
   for (const slot of slots) {
     const x = slot.x - left;
     const y = slot.y - top;
-    for (let offset = 0; offset < SLOT_SIZE; offset += 3) {
+    for (let offset = 0; offset < slotSize; offset += 3) {
       for (const point of [
-        [x + offset, y], [x + offset, y + SLOT_SIZE - 1],
-        [x, y + offset], [x + SLOT_SIZE - 1, y + offset]
+        [x + offset, y], [x + offset, y + slotSize - 1],
+        [x, y + offset], [x + slotSize - 1, y + offset]
       ]) {
         sampled++;
-        if (luminanceAt(image, point[0], point[1]) < 80) dark++;
+        if (luminance(image, point[0], point[1]) < 80) dark++;
       }
     }
   }
   return sampled ? dark / sampled : 0;
 }
 
-function luminanceAt(image: ImageData, x: number, y: number): number {
+function luminance(image: ImageData, x: number, y: number): number {
   const offset = (y * image.width + x) * 4;
   return image.data[offset] * 0.2126
     + image.data[offset + 1] * 0.7152
     + image.data[offset + 2] * 0.0722;
 }
 
-function sameOrigin(left: ModernActionBar, right: ModernActionBar): boolean {
+function sameOrigin(left: Bar, right: Bar): boolean {
   return Math.abs(left.x - right.x) <= 3 && Math.abs(left.y - right.y) <= 3;
 }

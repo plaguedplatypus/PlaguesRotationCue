@@ -1,26 +1,26 @@
-import { latestReleaseNote, RELEASE_HISTORY } from "./updateNotes";
+import { latestRelease, releases } from "./updateNotes";
 
-const UPDATE_TOAST_SEEN_KEY = "rotation-cue.update-toast-seen-id";
+const seenReleaseKey = "rotation-cue.update-toast-seen-id";
 
-function getSeenReleaseId(): string | null {
+function getSeenId(): string | null {
   try {
-    return window.localStorage.getItem(UPDATE_TOAST_SEEN_KEY);
+    return window.localStorage.getItem(seenReleaseKey);
   } catch {
     return null;
   }
 }
 
-function markReleaseSeen(releaseId: string): void {
+function markSeen(releaseId: string): void {
   try {
-    window.localStorage.setItem(UPDATE_TOAST_SEEN_KEY, releaseId);
+    window.localStorage.setItem(seenReleaseKey, releaseId);
   } catch {
     return;
   }
 }
 
-export function maybeShowUpdateToast(): void {
-  const latest = latestReleaseNote();
-  if (!latest?.version || !latest.items.length || getSeenReleaseId() === latest.version) return;
+export function maybeShowToast(): void {
+  const latest = latestRelease();
+  if (!latest?.version || !latest.items.length || getSeenId() === latest.version) return;
 
   document.querySelector(".update-toast-backdrop")?.remove();
   const backdrop = document.createElement("div");
@@ -46,7 +46,7 @@ export function maybeShowUpdateToast(): void {
   close.type = "button";
   close.textContent = "Got it";
   close.addEventListener("click", () => {
-    markReleaseSeen(latest.version);
+    markSeen(latest.version);
     backdrop.remove();
   });
 
@@ -55,7 +55,7 @@ export function maybeShowUpdateToast(): void {
   document.body.appendChild(backdrop);
 }
 
-export function showPatchNotesModal(): void {
+export function showPatchNotes(): void {
   const existingBackdrop = document.querySelector<HTMLElement>("#rotation-cue-patch-notes-backdrop");
   if (existingBackdrop) {
     existingBackdrop.hidden = false;
@@ -90,7 +90,7 @@ export function showPatchNotesModal(): void {
 
   const content = document.createElement("div");
   content.className = "patch-notes-content";
-  for (const note of RELEASE_HISTORY) {
+  for (const note of releases) {
     const entry = document.createElement("section");
     entry.className = "patch-notes-entry";
     const version = document.createElement("div");

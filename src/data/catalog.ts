@@ -1,4 +1,4 @@
-import type { AbilityStyle, RotationCategory } from "../types";
+import type { Style, Category } from "../types";
 
 // Add a normal item:
 // { id: "item_id", name: "Item Name" }
@@ -6,10 +6,10 @@ import type { AbilityStyle, RotationCategory } from "../types";
 // Add a scannable item:
 // { id: "item_id", name: "Item Name", scannable: true }
 //
-// Add an ability with a cooldownSeconds:
+// Add an ability with a cooldown:
 // { id: "ability_id", cooldownSeconds: 30 }
 
-export type PickerSectionId =
+export type PickerId =
   | "combat"
   | "spell"
   | "aspect"
@@ -19,48 +19,50 @@ export type PickerSectionId =
   | "item"
   | "cue";
 
-export type CatalogCategories = "all" | readonly RotationCategory[];
+export type CategoryScope = "all" | readonly Category[];
 
-export interface CatalogEntry {
+export interface Entry {
   id: string;
   name?: string;
   cooldownSeconds?: number;
   scannable?: boolean;
   icon?: string;
-  style?: AbilityStyle;
+  style?: Style;
 }
 
-export interface CatalogSection {
+export interface Section {
   id: string;
   label: string;
-  pickerSection: PickerSectionId;
-  style?: AbilityStyle;
-  assetDirectory: string;
-  categories: CatalogCategories;
-  defaultScannable?: boolean;
-  entries: readonly CatalogEntry[];
+  pickerSection: PickerId;
+  style?: Style;
+  assetDir: string;
+  categories: CategoryScope;
+  scanByDefault?: boolean;
+  entries: readonly Entry[];
 }
 
-export interface PickerSectionCatalogEntry {
-  id: PickerSectionId;
+export interface Picker {
+  id: PickerId;
   label: string;
   icon: string;
-  categories: CatalogCategories;
+  categories: CategoryScope;
 }
 
-export interface ActionBarSequenceCatalogEntry {
+export interface Sequence {
   abilityIds: readonly string[];
   useTransitions: readonly (readonly [fromAbilityId: string, toAbilityId: string])[];
-  /**
-   * Timer started by the first cast, hidden while later stages occupy the slot,
-   * then exposed on the first-stage icon after the final cast or a timeout.
-   */
+  /*
+  Timer is started by the first cast, hidden while later casts occupy the same slot,
+  then exposed on the first-stage icon after the final cast or a timeout.
+  */
   cooldownSeconds?: number;
 }
 
-// Icon states that occupy one physical action-bar slot and keybind. Only transitions
-// caused by an activation belong in useTransitions; expiry resets must not advance cues.
-export const ACTION_BAR_SEQUENCES: readonly ActionBarSequenceCatalogEntry[] = [
+/*
+These are icons that occupy one physical action-bar slot and keybind.
+Only transitions caused by an activation belong in useTransitions; timeout resets should not advance cues.
+*/
+export const sequences: readonly Sequence[] = [
   {
     abilityIds: ["dismember", "slaughter", "massacre"],
     cooldownSeconds: 24,
@@ -95,7 +97,7 @@ export const ACTION_BAR_SEQUENCES: readonly ActionBarSequenceCatalogEntry[] = [
   }
 ];
 
-export const PICKER_SECTIONS: readonly PickerSectionCatalogEntry[] = [
+export const pickers: readonly Picker[] = [
   { id: "combat", label: "Combat abilities", icon: "./assets/melee.png", categories: "all" },
   { id: "spell", label: "Spells", icon: "./assets/spells/ancient/blood_barrage.png", categories: ["magic", "hybrid"] },
   { id: "aspect", label: "Aspects", icon: "./assets/spells/aspects/vampyrism.png", categories: "all" },
@@ -106,10 +108,10 @@ export const PICKER_SECTIONS: readonly PickerSectionCatalogEntry[] = [
   { id: "cue", label: "Cue markers", icon: "./assets/items/marker_phase.png", categories: "all" }
 ];
 
-export const COMBAT_CATEGORY_PRESENTATION: Readonly<Record<RotationCategory, {
+export const categoryUi: Readonly<Record<Category, {
   label: string;
   icon: string;
-  style?: AbilityStyle;
+  style?: Style;
 }>> = {
   melee: { label: "Melee abilities", icon: "./assets/melee.png", style: "Melee" },
   magic: { label: "Magic abilities", icon: "./assets/magic.png", style: "Magic" },
@@ -118,16 +120,16 @@ export const COMBAT_CATEGORY_PRESENTATION: Readonly<Record<RotationCategory, {
   hybrid: { label: "Combat abilities", icon: "./assets/hybrid.png" }
 };
 
-export const CATALOG_SECTIONS: readonly CatalogSection[] = [
+export const sections: readonly Section[] = [
   // COMBAT
   {
     id: "melee",
     label: "Melee abilities",
     pickerSection: "combat",
     style: "Melee",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: ["melee", "hybrid"],
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "adaptive_strike", cooldownSeconds: 5.4 },
       { id: "attack_auto", name: "Melee Auto-Attack" },
@@ -158,9 +160,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Magic abilities",
     pickerSection: "combat",
     style: "Magic",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: ["magic", "hybrid"],
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "asphyxiate", cooldownSeconds: 20.4 },
       { id: "chain", cooldownSeconds: 10.2 },
@@ -189,9 +191,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Ranged abilities",
     pickerSection: "combat",
     style: "Ranged",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: ["ranged", "hybrid"],
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "binding_shot", cooldownSeconds: 15 },
       { id: "bombardment" },
@@ -218,9 +220,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Necromancy abilities",
     pickerSection: "combat",
     style: "Necromancy",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: ["necro", "hybrid"],
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "bloat" },
       { id: "blood_siphon", cooldownSeconds: 45 },
@@ -247,9 +249,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Necromancy conjures",
     pickerSection: "combat",
     style: "Necromancy",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: ["necro", "hybrid"],
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "command_phantom_guardian", cooldownSeconds: 9 },
       { id: "command_putrid_zombie" },
@@ -269,9 +271,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Defensive abilities",
     pickerSection: "defensive",
     style: "Defensive",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: "all",
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "anticipation", cooldownSeconds: 24.6 },
       { id: "barricade", cooldownSeconds: 60 },
@@ -299,9 +301,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Utility abilities",
     pickerSection: "utility",
     style: "Utility",
-    assetDirectory: "abilities",
+    assetDir: "abilities",
     categories: "all",
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "demon_slayer", cooldownSeconds: 60 },
       { id: "dragon_slayer", cooldownSeconds: 60 },
@@ -330,9 +332,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Normal spells",
     pickerSection: "spell",
     style: "Magic",
-    assetDirectory: "spells/normal",
-    categories: ["magic", "hybrid"],
-    defaultScannable: true,
+    assetDir: "spells/normal",
+    categories: "all",
+    scanByDefault: true,
     entries: [
       { id: "bind" },
       { id: "confuse" },
@@ -352,9 +354,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Ancient spells",
     pickerSection: "spell",
     style: "Magic",
-    assetDirectory: "spells/ancient",
-    categories: ["magic", "hybrid"],
-    defaultScannable: true,
+    assetDir: "spells/ancient",
+    categories: "all",
+    scanByDefault: true,
     entries: [
       { id: "blood_barrage" },
       { id: "blood_blitz" },
@@ -391,9 +393,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Aspects",
     pickerSection: "aspect",
     style: "Utility",
-    assetDirectory: "spells/aspects",
+    assetDir: "spells/aspects",
     categories: "all",
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "animate_dead" },
       { id: "darkness", style: "Necromancy" },
@@ -409,9 +411,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     label: "Prayers",
     pickerSection: "prayer",
     style: "Utility",
-    assetDirectory: "prayers",
+    assetDir: "prayers",
     categories: "all",
-    defaultScannable: true,
+    scanByDefault: true,
     entries: [
       { id: "deflect_magic" },
       { id: "deflect_melee" },
@@ -438,9 +440,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     id: "items",
     label: "Items",
     pickerSection: "item",
-    assetDirectory: "items",
+    assetDir: "items",
     categories: "all",
-    defaultScannable: false,
+    scanByDefault: false,
     entries: [
       { id: "eof", name: "Essence of Finality" },
       { id: "eof_black", name: "Essence of Finality (Black)" },
@@ -472,9 +474,9 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     id: "cue_markers",
     label: "Cue markers",
     pickerSection: "cue",
-    assetDirectory: "items",
+    assetDir: "items",
     categories: "all",
-    defaultScannable: false,
+    scanByDefault: false,
     entries: [
       { id: "marker_move", name: "Move" },
       { id: "marker_phase", name: "Phase" },

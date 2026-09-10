@@ -1,19 +1,19 @@
 import {
-  actionBarBindingAbilityId,
-  actionBarSequenceCooldownSeconds,
-  actionBarSequenceForAbility,
-  nextActionBarSequenceAbilityId,
-  rotationEntryById
+  bindingId,
+  nextSequenceId,
+  entryById,
+  sequenceCooldown,
+  sequenceFor
 } from "../data/abilityData";
-import type { AbilityScanResult, DetectedSlot } from "../types";
+import type { ScanResult, DetectedSlot } from "../types";
 
-const KEYBINDS_KEY = "rotation-cue.visual-keybinds.v1";
+const storageKey = "rotation-cue.visual-keybinds.v1";
 
-export type VisualKeybinds = Record<string, string>;
+export type Keybinds = Record<string, string>;
 
-export function loadVisualKeybinds(): VisualKeybinds {
+export function loadKeybinds(): Keybinds {
   try {
-    const stored = JSON.parse(localStorage.getItem(KEYBINDS_KEY) ?? "null") as unknown;
+    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as unknown;
     if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
     return Object.fromEntries(Object.entries(stored).flatMap(([abilityId, value]) =>
       typeof value === "string" && value.trim() ? [[abilityId, value.trim()]] : []
@@ -23,35 +23,35 @@ export function loadVisualKeybinds(): VisualKeybinds {
   }
 }
 
-export function saveVisualKeybinds(keybinds: VisualKeybinds): void {
-  localStorage.setItem(KEYBINDS_KEY, JSON.stringify(keybinds));
+export function saveKeybinds(keybinds: Keybinds): void {
+  localStorage.setItem(storageKey, JSON.stringify(keybinds));
 }
 
-export function cueKeybindSequence(
+export function cueKeys(
   abilityId: string,
-  keybinds: VisualKeybinds,
+  keybinds: Keybinds,
   autoAdvance: boolean
 ): string[] {
-  const entry = rotationEntryById.get(abilityId);
-  const bindingAbilityId = actionBarBindingAbilityId(abilityId);
-  const keybind = keybinds[bindingAbilityId] ?? keybinds[abilityId];
+  const entry = entryById.get(abilityId);
+  const bindId = bindingId(abilityId);
+  const keybind = keybinds[bindId] ?? keybinds[abilityId];
   if (!entry || !keybind || entry.pickerSection === "item" || entry.pickerSection === "cue") {
     return ["Alt+1"];
   }
   return autoAdvance && (entry.cooldownSeconds !== undefined
-    || actionBarSequenceCooldownSeconds(abilityId) !== undefined
-    || nextActionBarSequenceAbilityId(abilityId) !== undefined)
+    || sequenceCooldown(abilityId) !== undefined
+    || nextSequenceId(abilityId) !== undefined)
     ? [keybind]
     : [keybind, "Alt+1"];
 }
 
-export function visualKeybindModalMarkup(
-  result: AbilityScanResult | null,
-  keybinds: VisualKeybinds,
+export function modalMarkup(
+  result: ScanResult | null,
+  keybinds: Keybinds,
   scanning: boolean,
-  selectedBarIndex: number
+  selectedBar: number
 ): string {
-  const recognized = recognizedSlots(result);
+  const recognized = bindableSlots(result);
   const groups = new Map<number, DetectedSlot[]>();
   recognized.forEach((slot) => {
     const slots = groups.get(slot.barIndex) ?? [];
@@ -59,26 +59,26 @@ export function visualKeybindModalMarkup(
     groups.set(slot.barIndex, slots);
   });
 
-  const groupedBars = [...groups.entries()].sort(([left], [right]) => left - right);
-  const activeBarIndex = groups.has(selectedBarIndex)
-    ? selectedBarIndex
-    : groupedBars[0]?.[0];
-  const activeSlots = activeBarIndex === undefined ? [] : groups.get(activeBarIndex) ?? [];
-  const tabs = groupedBars.length
+  const bars = [...groups.entries()].sort(([left], [right]) => left - right);
+  const activeBar = groups.has(selectedBar)
+    ? selectedBar
+    : bars[0]?.[0];
+  const slots = activeBar === undefined ? [] : groups.get(activeBar) ?? [];
+  const tabs = bars.length
     ? `<div class="visual-keybind-tabs" role="tablist" aria-label="Detected action bars">
-        ${groupedBars.map(([barIndex]) => {
-          const active = barIndex === activeBarIndex;
+        ${bars.map(([barIndex]) => {
+          const active = barIndex === activeBar;
           return `<button class="visual-keybind-tab${active ? " is-active" : ""}" type="button"
             id="visual-keybind-tab-${barIndex}" role="tab" aria-selected="${active}"
             aria-controls="visual-keybind-panel-${barIndex}" data-keybind-bar-index="${barIndex}">${barLabel(barIndex)}</button>`;
         }).join("")}
       </div>`
     : "";
-  const content = activeBarIndex !== undefined
-    ? `<div class="visual-keybind-list" id="visual-keybind-panel-${activeBarIndex}"
-        role="tabpanel" aria-labelledby="visual-keybind-tab-${activeBarIndex}">
-        ${activeSlots.sort((left, right) => left.slotIndex - right.slotIndex)
-          .map((slot) => visualKeybindRow(slot, keybinds)).join("")}
+  const content = activeBar !== undefined
+    ? `<div class="visual-keybind-list" id="visual-keybind-panel-${activeBar}"
+        role="tabpanel" aria-labelledby="visual-keybind-tab-${activeBar}">
+        ${slots.sort((left, right) => left.slotIndex - right.slotIndex)
+          .map((slot) => rowMarkup(slot, keybinds)).join("")}
       </div>`
     : `<p class="visual-keybind-empty">${result
       ? "No bindable abilities were found. Scan the action bars again."
@@ -112,7 +112,7 @@ function barLabel(barIndex: number): string {
   return barIndex === 1 ? "Main Bar" : `Bar ${barIndex - 1}`;
 }
 
-export function bindVisualKeybindFields(
+export function bindFields(
   scope: ParentNode,
   onChange: (abilityId: string, keybind: string | null) => void
 ): void {
@@ -143,7 +143,7 @@ export function bindVisualKeybindFields(
         button.blur();
         return;
       }
-      const keybind = keybindFromEvent(event);
+      const keybind = keyFromEvent(event);
       if (!keybind) return;
       button.dataset.value = keybind;
       onChange(abilityId, keybind);
@@ -152,22 +152,22 @@ export function bindVisualKeybindFields(
   });
 }
 
-function recognizedSlots(result: AbilityScanResult | null): DetectedSlot[] {
+function bindableSlots(result: ScanResult | null): DetectedSlot[] {
   return result?.slots.filter((slot) => {
     if (!slot.accepted || !slot.abilityId) return false;
-    const entry = rotationEntryById.get(slot.abilityId);
+    const entry = entryById.get(slot.abilityId);
     return entry?.pickerSection !== "item" && entry?.pickerSection !== "cue";
   }) ?? [];
 }
 
-function visualKeybindRow(slot: DetectedSlot, keybinds: VisualKeybinds): string {
+function rowMarkup(slot: DetectedSlot, keybinds: Keybinds): string {
   const abilityId = slot.abilityId!;
-  const entry = rotationEntryById.get(abilityId);
-  const bindingAbilityId = actionBarBindingAbilityId(abilityId);
-  const value = keybinds[bindingAbilityId] ?? keybinds[abilityId] ?? "";
-  const sequence = actionBarSequenceForAbility(abilityId);
+  const entry = entryById.get(abilityId);
+  const bindId = bindingId(abilityId);
+  const value = keybinds[bindId] ?? keybinds[abilityId] ?? "";
+  const sequence = sequenceFor(abilityId);
   const name = sequence
-    ? `${rotationEntryById.get(sequence[0])?.name ?? sequence[0]} sequence`
+    ? `${entryById.get(sequence[0])?.name ?? sequence[0]} sequence`
     : entry?.name ?? abilityId;
   const icon = entry?.icon
     ? `<img src="${escapeHtml(entry.icon)}" alt="">`
@@ -179,12 +179,12 @@ function visualKeybindRow(slot: DetectedSlot, keybinds: VisualKeybinds): string 
         <strong>${escapeHtml(name)}</strong>
         <small>Slot ${slot.slotIndex}</small>
       </span>
-      <button class="visual-keybind-input" type="button" data-ability-id="${escapeHtml(bindingAbilityId)}"
+      <button class="visual-keybind-input" type="button" data-ability-id="${escapeHtml(bindId)}"
         data-value="${escapeHtml(value)}" aria-label="Set keybind for ${escapeHtml(name)}">${escapeHtml(value || "Unbound")}</button>
     </div>`;
 }
 
-function keybindFromEvent(event: KeyboardEvent): string | null {
+function keyFromEvent(event: KeyboardEvent): string | null {
   if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return null;
   const key = baseKey(event);
   if (!key) return null;

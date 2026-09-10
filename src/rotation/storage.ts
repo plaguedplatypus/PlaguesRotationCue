@@ -1,12 +1,12 @@
 import { abilityById } from "../data/abilityData";
-import type { Rotation, RotationCategory } from "../types";
+import type { Rotation, Category } from "../types";
 
-const STORAGE_KEY = "rotation-cue.rotations.v1";
-const ACTIVE_KEY = "rotation-cue.active-rotation.v1";
-const CATEGORY_KEY = "rotation-cue.category.v1";
-const COLLAPSED_ROTATIONS_KEY = "rotation-cue.collapsed-rotations.v1";
+const rotationsKey = "rotation-cue.rotations.v1";
+const activeKey = "rotation-cue.active-rotation.v1";
+const categoryKey = "rotation-cue.category.v1";
+const collapsedKey = "rotation-cue.collapsed-rotations.v1";
 
-export const rotationCategories: RotationCategory[] = ["melee", "magic", "ranged", "necro", "hybrid"];
+export const categories: Category[] = ["melee", "magic", "ranged", "necro", "hybrid"];
 
 export const sampleRotation: Rotation = {
   id: "sample-necro",
@@ -24,7 +24,7 @@ export const sampleRotation: Rotation = {
   ]
 };
 
-function freshSampleRotation(): Rotation {
+function freshSample(): Rotation {
   return {
     ...sampleRotation,
     steps: sampleRotation.steps.map((step) => ({ ...step }))
@@ -38,7 +38,7 @@ type StoredRotations = {
 
 type LegacyRotation = Omit<Rotation, "category"> & { category?: unknown };
 
-function isRotationShape(value: unknown): value is LegacyRotation {
+function isRotation(value: unknown): value is LegacyRotation {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<LegacyRotation>;
   return typeof candidate.id === "string" &&
@@ -49,12 +49,13 @@ function isRotationShape(value: unknown): value is LegacyRotation {
     );
 }
 
-function isCategory(value: unknown): value is RotationCategory {
-  return rotationCategories.includes(value as RotationCategory);
+function isCategory(value: unknown): value is Category {
+  return categories.includes(value as Category);
 }
 
-function inferCategory(rotation: LegacyRotation): RotationCategory {
+function inferCategory(rotation: LegacyRotation): Category {
   if (isCategory(rotation.category)) return rotation.category;
+  // Version 1 saves had no category; a single-style rotation can recover it.
   const styles = new Set(rotation.steps.map((step) => abilityById.get(step.abilityId)?.style).filter(Boolean));
   if (styles.size !== 1) return "hybrid";
   const [style] = styles;
@@ -65,7 +66,7 @@ function inferCategory(rotation: LegacyRotation): RotationCategory {
   return "hybrid";
 }
 
-function normalizeRotation(rotation: LegacyRotation): Rotation {
+function normalize(rotation: LegacyRotation): Rotation {
   return {
     id: rotation.id,
     name: rotation.name,
@@ -76,46 +77,46 @@ function normalizeRotation(rotation: LegacyRotation): Rotation {
 
 export function loadRotations(): Rotation[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [freshSampleRotation()];
+    const raw = localStorage.getItem(rotationsKey);
+    if (!raw) return [freshSample()];
     const stored = JSON.parse(raw) as Partial<StoredRotations>;
     const rotations = Array.isArray(stored.rotations)
-      ? stored.rotations.filter(isRotationShape).map(normalizeRotation)
+      ? stored.rotations.filter(isRotation).map(normalize)
       : [];
     return rotations;
   } catch {
-    return [freshSampleRotation()];
+    return [freshSample()];
   }
 }
 
 export function saveRotations(rotations: Rotation[]): void {
   const stored: StoredRotations = { version: 2, rotations };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  localStorage.setItem(rotationsKey, JSON.stringify(stored));
 }
 
-export function loadActiveRotationId(rotations: Rotation[]): string {
-  const savedId = localStorage.getItem(ACTIVE_KEY);
+export function loadActiveId(rotations: Rotation[]): string {
+  const savedId = localStorage.getItem(activeKey);
   return rotations.some((rotation) => rotation.id === savedId)
     ? savedId as string
     : "";
 }
 
-export function saveActiveRotationId(rotationId: string): void {
-  localStorage.setItem(ACTIVE_KEY, rotationId);
+export function saveActiveId(rotationId: string): void {
+  localStorage.setItem(activeKey, rotationId);
 }
 
-export function loadSelectedCategory(): RotationCategory {
-  const saved = localStorage.getItem(CATEGORY_KEY);
+export function loadCategory(): Category {
+  const saved = localStorage.getItem(categoryKey);
   return isCategory(saved) ? saved : "necro";
 }
 
-export function saveSelectedCategory(category: RotationCategory): void {
-  localStorage.setItem(CATEGORY_KEY, category);
+export function saveCategory(category: Category): void {
+  localStorage.setItem(categoryKey, category);
 }
 
-export function loadCollapsedRotationIds(): string[] {
+export function loadCollapsedIds(): string[] {
   try {
-    const raw = localStorage.getItem(COLLAPSED_ROTATIONS_KEY);
+    const raw = localStorage.getItem(collapsedKey);
     if (!raw) return [];
     const saved = JSON.parse(raw) as unknown;
     return Array.isArray(saved)
@@ -126,9 +127,9 @@ export function loadCollapsedRotationIds(): string[] {
   }
 }
 
-export function saveCollapsedRotationIds(rotationIds: Iterable<string>): void {
+export function saveCollapsedIds(rotationIds: Iterable<string>): void {
   localStorage.setItem(
-    COLLAPSED_ROTATIONS_KEY,
+    collapsedKey,
     JSON.stringify([...new Set(rotationIds)])
   );
 }

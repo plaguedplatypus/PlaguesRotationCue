@@ -6,8 +6,8 @@
   "iconUrl": "./assets/icon.png",
   "defaultWidth": 760,
   "defaultHeight": 760,
-  "minWidth": 360,
-  "minHeight": 199,
+  "minWidth": 263,
+  "minHeight": 40,
   "requestHandlers": [],
   "activators": [],
   "permissions": "pixel,overlay"

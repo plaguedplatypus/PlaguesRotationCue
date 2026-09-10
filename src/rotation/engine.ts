@@ -1,72 +1,72 @@
-import type { CueItem, Rotation, RotationStep } from "../types";
+import type { Cue, Rotation, Step } from "../types";
 
-export class RotationEngine {
+export class Engine {
   private rotation: Rotation | null = null;
-  private currentIndex = 0;
+  private index = 0;
 
   setRotation(rotation: Rotation | null): void {
     this.rotation = rotation;
-    this.currentIndex = 0;
+    this.index = 0;
   }
 
   syncRotation(rotation: Rotation | null): void {
     this.rotation = rotation;
-    this.currentIndex = this.normalizeIndex(this.currentIndex);
+    this.index = this.clampIndex(this.index);
   }
 
   next(loopAtEnd = false): boolean {
-    const steps = this.playableSteps();
+    const steps = this.playable();
     if (!steps.length) return false;
-    if (this.currentIndex >= steps.length - 1) {
+    if (this.index >= steps.length - 1) {
       if (!loopAtEnd) return false;
-      this.currentIndex = 0;
+      this.index = 0;
       return true;
     }
-    this.currentIndex += 1;
+    this.index += 1;
     return true;
   }
 
   previous(): void {
-    if (!this.playableSteps().length) return;
-    this.currentIndex = Math.max(this.currentIndex - 1, 0);
+    if (!this.playable().length) return;
+    this.index = Math.max(this.index - 1, 0);
   }
 
   reset(): void {
-    this.currentIndex = 0;
+    this.index = 0;
   }
 
-  getCurrentStep(): RotationStep | null {
-    return this.playableSteps()[this.currentIndex] ?? null;
+  currentStep(): Step | null {
+    return this.playable()[this.index] ?? null;
   }
 
-  getCurrentIndex(): number {
-    return this.currentIndex;
+  currentIndex(): number {
+    return this.index;
   }
 
-  getUpcomingSteps(count = 4, loopAtEnd = false): CueItem[] {
-    const steps = this.playableSteps();
+  upcomingSteps(count = 4, loopAtEnd = false): Cue[] {
+    const steps = this.playable();
     if (!steps.length || count <= 0) return [];
 
-    const visibleCount = Math.min(count, loopAtEnd ? steps.length : steps.length - this.currentIndex);
+    const visibleCount = Math.min(count, loopAtEnd ? steps.length : steps.length - this.index);
     return Array.from({ length: visibleCount }, (_, offset) => {
       const stepIndex = loopAtEnd
-        ? (this.currentIndex + offset) % steps.length
-        : this.currentIndex + offset;
+        ? (this.index + offset) % steps.length
+        : this.index + offset;
       return { step: steps[stepIndex], stepIndex, offset };
     });
   }
 
-  getStepCount(): number {
-    return this.playableSteps().length;
+  stepCount(): number {
+    return this.playable().length;
   }
 
-  private normalizeIndex(index: number): number {
-    const length = this.playableSteps().length;
+  private clampIndex(index: number): number {
+    const length = this.playable().length;
     if (!length) return 0;
     return Math.max(0, Math.min(index, length - 1));
   }
 
-  private playableSteps(): RotationStep[] {
+  private playable(): Step[] {
     return (this.rotation?.steps ?? []).filter((step) => !!step.abilityId);
   }
 }

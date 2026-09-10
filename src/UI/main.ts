@@ -1,206 +1,207 @@
 import * as a1lib from "alt1/base";
-import { CurrentActionBarCueOverlay } from "../alt1/actionBar";
-import { DiagnosticAbilityReader } from "../alt1/abilityReader";
+import { SlotOverlay } from "../alt1/actionBar";
+import { Reader } from "../alt1/abilityReader";
 import { abilityById } from "../data/abilityData";
-import { RotationEngine } from "../rotation/engine";
-import type { AppState } from "../state";
-import type { AbilityScanResult, ExpectedAbilityObservation, ScreenPoint } from "../types";
-import { diagnosticsBodyMarkup, diagnosticsPanelMarkup, diagnosticsStatus } from "./diagnostics";
+import { Engine } from "../rotation/engine";
+import type { State } from "../state";
+import type { ScanResult, Observation, Point } from "../types";
+import { bodyMarkup, panelMarkup, statusText } from "./diagnostics";
 import { renderEditor } from "./editor";
 import {
-  bindVisualKeybindFields,
-  loadVisualKeybinds,
-  saveVisualKeybinds,
-  visualKeybindModalMarkup
+  bindFields,
+  loadKeybinds,
+  saveKeybinds,
+  modalMarkup as keybindModal
 } from "./keybind";
-import { Alt1CueOverlay, isAlt1Available } from "./overlay";
+import { CueOverlay, isAlt1Available } from "./overlay";
 import {
-  bindSettingsShell,
+  bindRanges,
   loadSettings,
   saveSettings,
-  settingsModalMarkup
+  modalMarkup as settingsModal
 } from "./settings";
-import { showPatchNotesModal } from "../updates/updateToast";
+import { showPatchNotes } from "../updates/updateToast";
 
-const EXPECTED_POLL_MS = 250;
-const OVERLAY_KEEPALIVE_MS = 5_000;
-const DIAGNOSTICS_REFRESH_MS = 500;
-const TRACKING_RECOVERY_RETRY_MS = 30_000;
-const TRANSFER_MESSAGE_MS = 4_000;
+const pollMs = 250;
+const keepaliveMs = 5_000;
+const diagnosticsMs = 500;
+const retryMs = 30_000;
+const messageMs = 4_000;
 
-export function mountApp(root: HTMLElement, state: AppState): void {
-  const engine = new RotationEngine();
-  const alt1Overlay = new Alt1CueOverlay();
-  const actionBarCueOverlay = new CurrentActionBarCueOverlay();
-  const abilityReader = new DiagnosticAbilityReader();
-  let selectedRotationId = "";
-  let scanResult: AbilityScanResult | null = null;
-  let scanInProgress = false;
-  let trackingEnabled = false;
-  let trackingInProgress = false;
-  let trackingTimer: number | null = null;
-  let trackingRecoveryTimer: number | null = null;
-  let trackingObservation: ExpectedAbilityObservation | null = null;
-  let lastDiagnosticsRefreshAt = 0;
+export function mountApp(root: HTMLElement, state: State): void {
+  const engine = new Engine();
+  const cueOverlay = new CueOverlay();
+  const slotOverlay = new SlotOverlay();
+  const reader = new Reader();
+  let lastActiveId = "";
+  let scanResult: ScanResult | null = null;
+  let scanning = false;
+  let tracking = false;
+  let polling = false;
+  let pollTimer: number | null = null;
+  let retryTimer: number | null = null;
+  let observation: Observation | null = null;
+  let lastDiagnosticsAt = 0;
   let diagnosticsOpen = false;
   let settingsOpen = false;
-  let visualKeybindsOpen = false;
-  let visualKeybindBarIndex = 1;
-  let settingsScrollTop = 0;
+  let keybindsOpen = false;
+  let keybindBar = 1;
+  let settingsScroll = 0;
   let settings = loadSettings();
-  let visualKeybinds = loadVisualKeybinds();
-  let overlayPlacementActive = false;
-  let overlayPlacementTimer: number | null = null;
-  let overlayPlacementListener: ((event: a1lib.Alt1EventType["alt1pressed"]) => void) | null = null;
-  let footerMessage = "";
-  let footerMessageTimer: number | null = null;
-  engine.setRotation(state.activeRotation);
-  alt1Overlay.setPosition(settings.overlayPosition);
-  alt1Overlay.setScale(settings.cueScale);
-  alt1Overlay.setBorderThickness(settings.cueBorderThickness);
-  alt1Overlay.setBorderColor(settings.cueBorderColor);
-  alt1Overlay.setOpacity(settings.overlayOpacity);
-  alt1Overlay.setShowAbilityNames(settings.showAbilityNames);
-  alt1Overlay.setShowNextLabel(settings.showNextLabel);
-  alt1Overlay.setVisualKeybinds(visualKeybinds);
-  alt1Overlay.setAutoAdvance(settings.autoAdvanceRotation);
+  let keybinds = loadKeybinds();
+  let placingOverlay = false;
+  let placementTimer: number | null = null;
+  let placementListener: ((event: a1lib.Alt1EventType["alt1pressed"]) => void) | null = null;
+  let footerText = "";
+  let footerTimer: number | null = null;
+  engine.setRotation(state.active);
+  cueOverlay.setPosition(settings.overlayPosition);
+  cueOverlay.setScale(settings.cueScale);
+  cueOverlay.setBorder(settings.cueBorderThickness);
+  cueOverlay.setBorderColor(settings.cueBorderColor);
+  cueOverlay.setOpacity(settings.overlayOpacity);
+  cueOverlay.setNames(settings.showAbilityNames);
+  cueOverlay.setKeybindVisible(settings.showNextLabel);
+  cueOverlay.setKeybinds(keybinds);
+  cueOverlay.setAutoAdvance(settings.autoAdvanceRotation);
 
-  const upcomingCues = (count: number) => engine.getUpcomingSteps(count, settings.loopRotationAtEnd);
+  const upcoming = (count: number) => engine.upcomingSteps(count, settings.loopRotationAtEnd);
 
-  const updateFooterStatus = (): void => {
+  const updateFooter = (): void => {
     const footer = root.querySelector<HTMLElement>(".app-footer");
     const text = footer?.querySelector<HTMLElement>("span");
     if (!footer || !text) return;
-    footer.classList.toggle("has-message", !!footerMessage);
-    text.textContent = footerMessage || (state.activeRotation
-      ? `Active: ${state.activeRotation.name}`
+    footer.classList.toggle("has-message", !!footerText);
+    text.textContent = footerText || (state.active
+      ? `Active: ${state.active.name}`
       : "No active rotation");
   };
 
-  const showTransferMessage = (message: string): void => {
-    footerMessage = message;
-    if (footerMessageTimer !== null) window.clearTimeout(footerMessageTimer);
-    updateFooterStatus();
-    footerMessageTimer = window.setTimeout(() => {
-      footerMessage = "";
-      footerMessageTimer = null;
-      updateFooterStatus();
-    }, TRANSFER_MESSAGE_MS);
+  const showMessage = (message: string): void => {
+    footerText = message;
+    if (footerTimer !== null) window.clearTimeout(footerTimer);
+    updateFooter();
+    footerTimer = window.setTimeout(() => {
+      footerText = "";
+      footerTimer = null;
+      updateFooter();
+    }, messageMs);
   };
 
-  const redrawActionBarCue = (): void => {
-    const abilityId = engine.getCurrentStep()?.abilityId;
-    const location = !scanInProgress && scanResult?.recognized && abilityId
-      ? abilityReader.getAbilityLocation(abilityId)
+  const drawSlot = (): void => {
+    const abilityId = engine.currentStep()?.abilityId;
+    const location = !scanning && scanResult?.recognized && abilityId
+      ? reader.getLocation(abilityId)
       : null;
-    actionBarCueOverlay.draw(location, settings.cueBorderColor, settings.cueBorderThickness);
+    slotOverlay.draw(location, settings.cueBorderColor, settings.cueBorderThickness);
   };
 
-  const overlayKeepaliveTimer = window.setInterval(() => {
-    redrawActionBarCue();
-    if (settings.showCueOverlay && !overlayPlacementActive) {
-      void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+  // Alt1 overlay groups expire, so unchanged cues still need a quiet refresh.
+  const keepaliveTimer = window.setInterval(() => {
+    drawSlot();
+    if (settings.showCueOverlay && !placingOverlay) {
+      void cueOverlay.draw(upcoming(settings.upcomingAbilities));
     }
-  }, OVERLAY_KEEPALIVE_MS);
+  }, keepaliveMs);
 
-  const resetExpectedTracking = (): void => {
-    abilityReader.resetExpectedTracking();
-    trackingObservation = null;
-    alt1Overlay.setCurrentCooldown(null);
+  const resetTracking = (): void => {
+    reader.resetTracking();
+    observation = null;
+    cueOverlay.setCooldown(null);
   };
 
-  const stopExpectedTracking = (): void => {
-    trackingEnabled = false;
-    if (trackingTimer !== null) window.clearInterval(trackingTimer);
-    trackingTimer = null;
-    if (trackingRecoveryTimer !== null) window.clearTimeout(trackingRecoveryTimer);
-    trackingRecoveryTimer = null;
-    resetExpectedTracking();
+  const stopTracking = (): void => {
+    tracking = false;
+    if (pollTimer !== null) window.clearInterval(pollTimer);
+    pollTimer = null;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
+    resetTracking();
   };
 
-  const scheduleTrackingRecovery = (delay = 750): void => {
-    if (trackingRecoveryTimer !== null || !settings.autoAdvanceRotation
-      || !state.activeRotation || !isAlt1Available()) return;
-    trackingRecoveryTimer = window.setTimeout(() => {
-      trackingRecoveryTimer = null;
-      if (settings.autoAdvanceRotation && state.activeRotation && !scanInProgress) {
-        void runFullScan(false, true);
+  const scheduleRetry = (delay = 750): void => {
+    if (retryTimer !== null || !settings.autoAdvanceRotation
+      || !state.active || !isAlt1Available()) return;
+    retryTimer = window.setTimeout(() => {
+      retryTimer = null;
+      if (settings.autoAdvanceRotation && state.active && !scanning) {
+        void scanBars(false, true);
       }
     }, delay);
   };
 
-  function bindDiagnosticsControls(scope: ParentNode): void {
-    scope.querySelector("#scan-action-bars")?.addEventListener("click", () => { void runFullScan(); });
+  function bindDiagnostics(scope: ParentNode): void {
+    scope.querySelector("#scan-action-bars")?.addEventListener("click", () => { void scanBars(); });
     scope.querySelector("#toggle-tracking")?.addEventListener("click", () => {
-      if (trackingEnabled) {
-        stopExpectedTracking();
-        updateRuntimeCueUi();
+      if (tracking) {
+        stopTracking();
+        updateCue();
       } else {
-        startExpectedTracking();
+        startTracking();
       }
     });
   }
 
-  function refreshDiagnosticsPanel(force = false): void {
+  function refreshDiagnostics(force = false): void {
     const status = root.querySelector<HTMLElement>(".diagnostics-panel summary small");
-    if (status) status.textContent = diagnosticsStatus({ trackingEnabled, alt1Available: isAlt1Available() });
+    if (status) status.textContent = statusText({ trackingEnabled: tracking, alt1Available: isAlt1Available() });
     if (!settings.showDiagnostics || !diagnosticsOpen || settingsOpen) return;
     const now = Date.now();
-    if (!force && now - lastDiagnosticsRefreshAt < DIAGNOSTICS_REFRESH_MS) return;
-    lastDiagnosticsRefreshAt = now;
+    if (!force && now - lastDiagnosticsAt < diagnosticsMs) return;
+    lastDiagnosticsAt = now;
 
     const body = root.querySelector<HTMLElement>(".diagnostics-body");
     if (!body) return;
-    const expectedAbilityId = engine.getCurrentStep()?.abilityId;
-    const observation = trackingObservation?.abilityId === expectedAbilityId
-      ? trackingObservation
+    const expectedId = engine.currentStep()?.abilityId;
+    const current = observation?.abilityId === expectedId
+      ? observation
       : null;
-    body.innerHTML = diagnosticsBodyMarkup({
+    body.innerHTML = bodyMarkup({
       result: scanResult,
-      scanning: scanInProgress,
-      expectedAbilityId,
-      currentStepIndex: engine.getCurrentIndex(),
-      rotationStepCount: engine.getStepCount(),
-      trackingEnabled,
-      observation,
+      scanning,
+      expectedAbilityId: expectedId,
+      currentStepIndex: engine.currentIndex(),
+      rotationStepCount: engine.stepCount(),
+      trackingEnabled: tracking,
+      observation: current,
       alt1Available: isAlt1Available()
     });
-    bindDiagnosticsControls(body);
+    bindDiagnostics(body);
   }
 
-  function refreshScanControls(): void {
+  function refreshScan(): void {
     root.querySelectorAll<HTMLButtonElement>(".rotation-scan-button").forEach((button) => {
-      button.disabled = !isAlt1Available() || scanInProgress;
-      button.textContent = scanInProgress ? "Scanning…" : "Scan";
+      button.disabled = !isAlt1Available() || scanning;
+      button.textContent = scanning ? "Scanning…" : "Scan";
     });
     const keybindScan = root.querySelector<HTMLButtonElement>("#scan-visual-keybinds");
     if (keybindScan) {
-      keybindScan.disabled = !isAlt1Available() || scanInProgress;
-      keybindScan.textContent = scanInProgress ? "Scanning…" : "Scan Bars";
+      keybindScan.disabled = !isAlt1Available() || scanning;
+      keybindScan.textContent = scanning ? "Scanning…" : "Scan Bars";
     }
-    refreshDiagnosticsPanel(true);
+    refreshDiagnostics(true);
   }
 
-  function updateRuntimeCueUi(): void {
-    const currentIndex = engine.getCurrentIndex();
+  function updateCue(): void {
+    const currentIndex = engine.currentIndex();
     root.querySelectorAll<HTMLElement>(".sequence-step[data-rotation-id]").forEach((step) => {
-      const isCurrent = step.dataset.rotationId === state.activeRotationId
+      const isCurrent = step.dataset.rotationId === state.activeId
         && step.dataset.playableIndex !== undefined
         && Number(step.dataset.playableIndex) === currentIndex;
       step.classList.toggle("is-current", isCurrent);
     });
 
-    if (settings.showCueOverlay && !overlayPlacementActive) {
-      void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+    if (settings.showCueOverlay && !placingOverlay) {
+      void cueOverlay.draw(upcoming(settings.upcomingAbilities));
     }
-    redrawActionBarCue();
-    refreshDiagnosticsPanel(true);
+    drawSlot();
+    refreshDiagnostics(true);
   }
 
-  function advanceAfterConfirmedUse(): boolean {
-    const stepCount = engine.getStepCount();
+  function advance(): boolean {
+    const stepCount = engine.stepCount();
     if (!stepCount) return false;
-    if (engine.getCurrentIndex() >= stepCount - 1) {
+    if (engine.currentIndex() >= stepCount - 1) {
       if (!settings.loopRotationAtEnd) return false;
       engine.reset();
       return true;
@@ -208,276 +209,285 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     return engine.next(false);
   }
 
-  const pollExpected = async (): Promise<void> => {
-    if (!trackingEnabled || trackingInProgress || scanInProgress) return;
-    const abilityId = engine.getCurrentStep()?.abilityId;
+  const poll = async (): Promise<void> => {
+    if (!tracking || polling || scanning) return;
+    const abilityId = engine.currentStep()?.abilityId;
     if (!abilityId || !abilityById.has(abilityId)) {
-      trackingEnabled = false;
-      if (trackingTimer !== null) window.clearInterval(trackingTimer);
-      trackingTimer = null;
-      trackingObservation = null;
-      updateRuntimeCueUi();
+      tracking = false;
+      if (pollTimer !== null) window.clearInterval(pollTimer);
+      pollTimer = null;
+      observation = null;
+      updateCue();
       return;
     }
 
-    trackingInProgress = true;
-    let recoverAfterPoll = false;
-    let cueUiUpdateRequired = false;
-    let overlayCooldownChanged = false;
+    polling = true;
+    let retryAfter = false;
+    let cueChanged = false;
+    let cooldownChanged = false;
     try {
-      const observation = await abilityReader.observeExpectedAbility(abilityId);
-      trackingObservation = observation;
-      overlayCooldownChanged = alt1Overlay.setCurrentCooldown(
-        observation.cooldownSeconds !== undefined ? observation.abilityId : null,
-        observation.cooldownSeconds
+      const sample = await reader.observeExpected(abilityId);
+      observation = sample;
+      cooldownChanged = cueOverlay.setCooldown(
+        sample.cooldown !== undefined ? sample.abilityId : null,
+        sample.cooldown
       );
-      if (observation.state === "identity-lost" || !observation.slotFound) {
-        trackingEnabled = false;
-        if (trackingTimer !== null) window.clearInterval(trackingTimer);
-        trackingTimer = null;
-        recoverAfterPoll = settings.autoAdvanceRotation;
-        cueUiUpdateRequired = true;
+      if (sample.state === "identity-lost" || !sample.slotFound) {
+        tracking = false;
+        if (pollTimer !== null) window.clearInterval(pollTimer);
+        pollTimer = null;
+        retryAfter = settings.autoAdvanceRotation;
+        cueChanged = true;
       }
-      if (observation.useEvent && settings.autoAdvanceRotation) {
-        cueUiUpdateRequired = true;
-        const advanced = advanceAfterConfirmedUse();
-        resetExpectedTracking();
+      if (sample.used && settings.autoAdvanceRotation) {
+        cueChanged = true;
+        const advanced = advance();
+        resetTracking();
         if (!advanced) {
-          trackingEnabled = false;
-          if (trackingTimer !== null) window.clearInterval(trackingTimer);
-          trackingTimer = null;
+          tracking = false;
+          if (pollTimer !== null) window.clearInterval(pollTimer);
+          pollTimer = null;
         }
       }
     } finally {
-      trackingInProgress = false;
-      if (cueUiUpdateRequired) updateRuntimeCueUi();
+      polling = false;
+      if (cueChanged) updateCue();
       else {
-        if (overlayCooldownChanged && settings.showCueOverlay && !overlayPlacementActive) {
-          void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+        if (cooldownChanged && settings.showCueOverlay && !placingOverlay) {
+          void cueOverlay.draw(upcoming(settings.upcomingAbilities));
         }
-        refreshDiagnosticsPanel();
+        refreshDiagnostics();
       }
-      if (recoverAfterPoll) scheduleTrackingRecovery();
+      if (retryAfter) scheduleRetry();
     }
   };
 
-  const startExpectedTracking = (): boolean => {
-    const abilityId = engine.getCurrentStep()?.abilityId;
-    if (trackingEnabled || !isAlt1Available() || !scanResult?.recognized
+  const startTracking = (): boolean => {
+    const abilityId = engine.currentStep()?.abilityId;
+    if (tracking || !isAlt1Available() || !scanResult?.recognized
       || !abilityId || !abilityById.has(abilityId)
-      || !abilityReader.getAbilityLocation(abilityId)) return false;
-    if (trackingRecoveryTimer !== null) window.clearTimeout(trackingRecoveryTimer);
-    trackingRecoveryTimer = null;
-    resetExpectedTracking();
-    trackingEnabled = true;
-    trackingTimer = window.setInterval(() => { void pollExpected(); }, EXPECTED_POLL_MS);
-    void pollExpected();
-    refreshDiagnosticsPanel(true);
+      || !reader.getLocation(abilityId)) return false;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
+    resetTracking();
+    tracking = true;
+    pollTimer = window.setInterval(() => { void poll(); }, pollMs);
+    void poll();
+    refreshDiagnostics(true);
     return true;
   };
 
-  const runFullScan = async (showGeometry = true, retryOnMissingExpected = false): Promise<void> => {
-    if (scanInProgress || !isAlt1Available()) return;
-    stopExpectedTracking();
-    scanInProgress = true;
-    refreshScanControls();
-    scanResult = await abilityReader.scan({ showGeometry });
-    scanInProgress = false;
-    refreshScanControls();
-    redrawActionBarCue();
-    if (settings.autoAdvanceRotation && state.activeRotation && scanResult.recognized) {
-      if (!startExpectedTracking()) {
-        refreshDiagnosticsPanel(true);
-        if (retryOnMissingExpected) scheduleTrackingRecovery(TRACKING_RECOVERY_RETRY_MS);
+  const scanBars = async (showGeometry = true, retryMissing = false): Promise<void> => {
+    if (scanning || !isAlt1Available()) return;
+    stopTracking();
+    scanning = true;
+    refreshScan();
+    scanResult = await reader.scan({ showGeometry });
+    scanning = false;
+    refreshScan();
+    drawSlot();
+    if (settings.autoAdvanceRotation && state.active && scanResult.recognized) {
+      if (!startTracking()) {
+        refreshDiagnostics(true);
+        if (retryMissing) scheduleRetry(retryMs);
       }
     } else {
-      refreshDiagnosticsPanel(true);
-      if (retryOnMissingExpected) scheduleTrackingRecovery(TRACKING_RECOVERY_RETRY_MS);
+      refreshDiagnostics(true);
+      if (retryMissing) scheduleRetry(retryMs);
     }
-    if (visualKeybindsOpen) render();
+    if (keybindsOpen) render();
   };
 
-  const finishManualNavigation = (): void => {
-    resetExpectedTracking();
-    if (settings.autoAdvanceRotation && !trackingEnabled) startExpectedTracking();
-    updateRuntimeCueUi();
+  const finishNavigation = (): void => {
+    resetTracking();
+    if (settings.autoAdvanceRotation && !tracking) startTracking();
+    updateCue();
   };
-  const previousCue = (): void => { engine.previous(); finishManualNavigation(); };
-  const nextCue = (): void => { engine.next(settings.loopRotationAtEnd); finishManualNavigation(); };
-  const resetCue = (): void => { engine.reset(); finishManualNavigation(); };
+  const previousCue = (): void => { engine.previous(); finishNavigation(); };
+  const nextCue = (): void => { engine.next(settings.loopRotationAtEnd); finishNavigation(); };
+  const resetCue = (): void => { engine.reset(); finishNavigation(); };
 
-  const alt1CueKeybindListener = (): void => {
-    if (settingsOpen || !state.activeRotation || overlayPlacementActive) return;
+  const keybindListener = (): void => {
+    if (settingsOpen || !state.active || placingOverlay) return;
     nextCue();
   };
-  a1lib.on("alt1pressed", alt1CueKeybindListener);
+  a1lib.on("alt1pressed", keybindListener);
 
-  const updateOverlayPlacementUi = (message?: string): void => {
+  const updatePlacement = (message?: string): void => {
     const button = root.querySelector<HTMLButtonElement>("#settings-reposition-overlay");
     if (button) {
-      button.disabled = overlayPlacementActive || !settings.showCueOverlay;
-      button.textContent = overlayPlacementActive ? "Waiting for Alt+1" : "Reposition Overlay";
+      button.disabled = placingOverlay || !settings.showCueOverlay;
+      button.textContent = placingOverlay ? "Waiting for Alt+1" : "Reposition Overlay";
     }
     const status = root.querySelector<HTMLElement>("#settings-overlay-position-status");
     if (status) {
-      status.textContent = message ?? (overlayPlacementActive
+      status.textContent = message ?? (placingOverlay
         ? "Move the preview with your cursor, then press Alt+1."
         : settings.overlayPosition ? "Custom position saved." : "Using the default position.");
     }
   };
 
-  const stopOverlayPlacement = (redraw = true): void => {
-    overlayPlacementActive = false;
-    if (overlayPlacementTimer !== null) window.clearInterval(overlayPlacementTimer);
-    overlayPlacementTimer = null;
-    if (overlayPlacementListener) a1lib.removeListener("alt1pressed", overlayPlacementListener);
-    overlayPlacementListener = null;
+  const stopPlacement = (redraw = true): void => {
+    placingOverlay = false;
+    if (placementTimer !== null) window.clearInterval(placementTimer);
+    placementTimer = null;
+    if (placementListener) a1lib.removeListener("alt1pressed", placementListener);
+    placementListener = null;
     if (redraw) {
-      if (settings.showCueOverlay) void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
-      else alt1Overlay.clear();
+      if (settings.showCueOverlay) void cueOverlay.draw(upcoming(settings.upcomingAbilities));
+      else cueOverlay.clear();
     }
-    updateOverlayPlacementUi();
+    updatePlacement();
   };
 
-  const startOverlayPlacement = (): void => {
-    if (overlayPlacementActive) return;
+  const startPlacement = (): void => {
+    if (placingOverlay) return;
     if (!isAlt1Available()) {
-      updateOverlayPlacementUi("Open Rotation Cue inside Alt1 to reposition its overlay.");
+      updatePlacement("Open Rotation Cue inside Alt1 to reposition its overlay.");
       return;
     }
 
-    overlayPlacementActive = true;
-    updateOverlayPlacementUi();
-    overlayPlacementTimer = window.setInterval(() => {
-      const position = cleanScreenPoint(a1lib.getMousePosition());
+    placingOverlay = true;
+    updatePlacement();
+    placementTimer = window.setInterval(() => {
+      const position = cleanPoint(a1lib.getMousePosition());
       if (!position) return;
-      void alt1Overlay.drawPlacementPreview(upcomingCues(settings.upcomingAbilities), position);
+      void cueOverlay.drawPreview(upcoming(settings.upcomingAbilities), position);
     }, 100);
 
-    overlayPlacementListener = (event): void => {
-      if (!overlayPlacementActive) return;
-      const position = cleanScreenPoint(event.mouseRs ?? { x: event.x, y: event.y });
+    placementListener = (event): void => {
+      if (!placingOverlay) return;
+      const position = cleanPoint(event.mouseRs ?? { x: event.x, y: event.y });
       if (!position) {
-        stopOverlayPlacement(false);
-        alt1Overlay.clear();
-        updateOverlayPlacementUi("Could not read the RuneScape cursor position. Please try again.");
+        stopPlacement(false);
+        cueOverlay.clear();
+        updatePlacement("Could not read the RuneScape cursor position. Please try again.");
         return;
       }
 
       settings = { ...settings, overlayPosition: position };
       saveSettings(settings);
-      alt1Overlay.setPosition(position);
-      stopOverlayPlacement(false);
-      if (settings.showCueOverlay) void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
-      updateOverlayPlacementUi("Position saved.");
+      cueOverlay.setPosition(position);
+      stopPlacement(false);
+      if (settings.showCueOverlay) void cueOverlay.draw(upcoming(settings.upcomingAbilities));
+      updatePlacement("Position saved.");
     };
-    a1lib.on("alt1pressed", overlayPlacementListener);
+    a1lib.on("alt1pressed", placementListener);
   };
 
   const render = (): void => {
-    const currentSettingsBody = !visualKeybindsOpen
+    const settingsBody = !keybindsOpen
       ? root.querySelector<HTMLElement>("#settings-backdrop .settings-modal-body")
       : null;
-    if (currentSettingsBody) settingsScrollTop = currentSettingsBody.scrollTop;
+    if (settingsBody) settingsScroll = settingsBody.scrollTop;
 
-    const rotationChanged = selectedRotationId !== state.activeRotationId;
-    const activatedRotationId = rotationChanged && state.activeRotation ? state.activeRotationId : "";
-    selectedRotationId = state.activeRotationId;
-    if (rotationChanged) {
-      stopExpectedTracking();
-      engine.setRotation(state.activeRotation);
+    const activeChanged = lastActiveId !== state.activeId;
+    const activatedId = activeChanged && state.active ? state.activeId : "";
+    lastActiveId = state.activeId;
+    if (activeChanged) {
+      stopTracking();
+      engine.setRotation(state.active);
     } else {
-      engine.syncRotation(state.activeRotation);
+      engine.syncRotation(state.active);
     }
 
-    const expectedAbilityId = engine.getCurrentStep()?.abilityId;
-    const currentObservation = trackingObservation?.abilityId === expectedAbilityId
-      ? trackingObservation
+    const expectedId = engine.currentStep()?.abilityId;
+    const currentObs = observation?.abilityId === expectedId
+      ? observation
       : null;
 
     root.innerHTML = `
       <header class="app-titlebar">
-        <h1>Rotation Cue</h1>
+        ${state.active
+          ? `<div class="titlebar-cue-controls" role="group" aria-label="Active rotation controls">
+              <button class="text-button" id="titlebar-previous-cue" type="button" title="Previous cue">← Previous</button>
+              <button class="icon-button" id="titlebar-reset-cue" type="button" title="Reset cue" aria-label="Reset cue">↺</button>
+              <button class="text-button" id="titlebar-next-cue" type="button" title="Next cue">Next →</button>
+            </div>`
+          : "<h1>Rotation Cue</h1>"}
         <button class="settings-trigger" id="open-settings" type="button" title="Settings" aria-label="Open settings">⋯</button>
         <span class="connection-dot ${isAlt1Available() ? "is-live" : ""}" title="${isAlt1Available() ? "Alt1 connected" : "Browser mode"}"></span>
       </header>
 
       <main class="rotation-editor" id="rotation-editor" aria-label="Rotation builder"></main>
 
-      ${diagnosticsPanelMarkup({
+        ${panelMarkup({
         result: scanResult,
-        scanning: scanInProgress,
-        expectedAbilityId,
-        currentStepIndex: engine.getCurrentIndex(),
-        rotationStepCount: engine.getStepCount(),
-        trackingEnabled,
-        observation: currentObservation,
+        scanning,
+        expectedAbilityId: expectedId,
+        currentStepIndex: engine.currentIndex(),
+        rotationStepCount: engine.stepCount(),
+        trackingEnabled: tracking,
+        observation: currentObs,
         alt1Available: isAlt1Available(),
         open: diagnosticsOpen,
         visible: settings.showDiagnostics
       })}
-      <footer class="app-footer${footerMessage ? " has-message" : ""}"><span>${footerMessage
-        ? escapeHtml(footerMessage)
-        : state.activeRotation ? `Active: ${escapeHtml(state.activeRotation.name)}` : "No active rotation"}</span></footer>
+      <footer class="app-footer${footerText ? " has-message" : ""}"><span>${footerText
+        ? escapeHtml(footerText)
+        : state.active ? `Active: ${escapeHtml(state.active.name)}` : "No active rotation"}</span></footer>
       ${settingsOpen
-        ? visualKeybindsOpen
-          ? visualKeybindModalMarkup(scanResult, visualKeybinds, scanInProgress, visualKeybindBarIndex)
-          : settingsModalMarkup(settings, overlayPlacementActive)
+        ? keybindsOpen
+          ? keybindModal(scanResult, keybinds, scanning, keybindBar)
+          : settingsModal(settings, placingOverlay)
         : ""}
     `;
 
     renderEditor(requiredElement(root, "#rotation-editor"), state, {
-      currentIndex: engine.getCurrentIndex(),
+      currentIndex: engine.currentIndex(),
       canScan: isAlt1Available(),
-      scanInProgress,
-      onScan: () => { void runFullScan(); },
+      scanning,
+      onScan: () => { void scanBars(); },
       onPrevious: previousCue,
       onNext: nextCue,
       onReset: resetCue,
-      onTransferMessage: showTransferMessage
+      onMessage: showMessage
     });
-    const overlayCues = upcomingCues(settings.upcomingAbilities);
-    if (!settings.showCueOverlay) alt1Overlay.clear();
-    else if (!overlayPlacementActive) void alt1Overlay.draw(overlayCues);
-    redrawActionBarCue();
+    root.querySelector("#titlebar-previous-cue")?.addEventListener("click", previousCue);
+    root.querySelector("#titlebar-reset-cue")?.addEventListener("click", resetCue);
+    root.querySelector("#titlebar-next-cue")?.addEventListener("click", nextCue);
+    const overlayCues = upcoming(settings.upcomingAbilities);
+    if (!settings.showCueOverlay) cueOverlay.clear();
+    else if (!placingOverlay) void cueOverlay.draw(overlayCues);
+    drawSlot();
 
     root.querySelector(".diagnostics-panel")?.addEventListener("toggle", (event) => {
       diagnosticsOpen = (event.currentTarget as HTMLDetailsElement).open;
     });
-    bindDiagnosticsControls(root);
+    bindDiagnostics(root);
     root.querySelector("#open-settings")?.addEventListener("click", () => {
-      settingsScrollTop = 0;
+      settingsScroll = 0;
       settingsOpen = true;
-      visualKeybindsOpen = false;
+      keybindsOpen = false;
       render();
       root.querySelector<HTMLButtonElement>("#close-settings")?.focus();
     });
     root.querySelector("#close-settings")?.addEventListener("click", () => {
       settingsOpen = false;
-      visualKeybindsOpen = false;
+      keybindsOpen = false;
       render();
     });
     root.querySelector("#settings-backdrop")?.addEventListener("click", (event) => {
       if (event.target !== event.currentTarget) return;
       settingsOpen = false;
-      visualKeybindsOpen = false;
+      keybindsOpen = false;
       render();
     });
-    if (settingsOpen && !visualKeybindsOpen) {
-      bindSettingsShell(root);
-      root.querySelector("#show-patch-notes")?.addEventListener("click", showPatchNotesModal);
+    if (settingsOpen && !keybindsOpen) {
+      bindRanges(root);
+      root.querySelector("#show-patch-notes")?.addEventListener("click", showPatchNotes);
       const settingsBody = root.querySelector<HTMLElement>(".settings-modal-body");
-      if (settingsBody) settingsBody.scrollTop = settingsScrollTop;
+      if (settingsBody) settingsBody.scrollTop = settingsScroll;
       root.querySelector("#settings-visual-keybinds")?.addEventListener("click", () => {
-        visualKeybindsOpen = true;
-        visualKeybindBarIndex = 1;
+        keybindsOpen = true;
+        keybindBar = 1;
         render();
         root.querySelector<HTMLButtonElement>("#close-visual-keybinds")?.focus();
       });
     }
-    if (settingsOpen && visualKeybindsOpen) {
+    if (settingsOpen && keybindsOpen) {
       const returnToSettings = (): void => {
-        visualKeybindsOpen = false;
+        keybindsOpen = false;
         render();
         root.querySelector<HTMLButtonElement>("#settings-visual-keybinds")?.focus();
       };
@@ -486,30 +496,30 @@ export function mountApp(root: HTMLElement, state: AppState): void {
         if (event.target === event.currentTarget) returnToSettings();
       });
       root.querySelector("#scan-visual-keybinds")?.addEventListener("click", () => {
-        void runFullScan(false);
+        void scanBars(false);
       });
       root.querySelectorAll<HTMLButtonElement>("[data-keybind-bar-index]").forEach((button) => {
         button.addEventListener("click", () => {
-          visualKeybindBarIndex = Number(button.dataset.keybindBarIndex);
+          keybindBar = Number(button.dataset.keybindBarIndex);
           render();
-          root.querySelector<HTMLButtonElement>(`#visual-keybind-tab-${visualKeybindBarIndex}`)?.focus();
+          root.querySelector<HTMLButtonElement>(`#visual-keybind-tab-${keybindBar}`)?.focus();
         });
       });
-      bindVisualKeybindFields(root, (abilityId, keybind) => {
-        const next = { ...visualKeybinds };
+      bindFields(root, (abilityId, keybind) => {
+        const next = { ...keybinds };
         if (keybind) next[abilityId] = keybind;
         else delete next[abilityId];
-        visualKeybinds = next;
-        saveVisualKeybinds(visualKeybinds);
-        alt1Overlay.setVisualKeybinds(visualKeybinds);
+        keybinds = next;
+        saveKeybinds(keybinds);
+        cueOverlay.setKeybinds(keybinds);
         root.querySelectorAll<HTMLButtonElement>(".visual-keybind-input[data-ability-id]")
           .forEach((button) => {
             if (button.dataset.abilityId !== abilityId) return;
             button.dataset.value = keybind ?? "";
             button.textContent = keybind ?? "Unbound";
           });
-        if (settings.showCueOverlay && !overlayPlacementActive) {
-          void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+        if (settings.showCueOverlay && !placingOverlay) {
+          void cueOverlay.draw(upcoming(settings.upcomingAbilities));
         }
       });
     }
@@ -518,100 +528,100 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       settings = { ...settings, showCueOverlay: checked };
       saveSettings(settings);
       const reposition = root.querySelector<HTMLButtonElement>("#settings-reposition-overlay");
-      if (reposition) reposition.disabled = !checked || overlayPlacementActive;
+      if (reposition) reposition.disabled = !checked || placingOverlay;
       if (checked) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       } else {
-        if (overlayPlacementActive) stopOverlayPlacement(false);
-        alt1Overlay.clear();
+        if (placingOverlay) stopPlacement(false);
+        cueOverlay.clear();
       }
     });
-    root.querySelector("#settings-reposition-overlay")?.addEventListener("click", startOverlayPlacement);
+    root.querySelector("#settings-reposition-overlay")?.addEventListener("click", startPlacement);
     root.querySelector<HTMLInputElement>("#settings-cue-scale")?.addEventListener("input", (event) => {
       const cueScale = Number((event.currentTarget as HTMLInputElement).value);
       settings = { ...settings, cueScale };
       saveSettings(settings);
-      alt1Overlay.setScale(cueScale);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setScale(cueScale);
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLSelectElement>("#settings-upcoming")?.addEventListener("change", (event) => {
-      const upcomingAbilities = Number((event.currentTarget as HTMLSelectElement).value);
-      settings = { ...settings, upcomingAbilities };
+      const count = Number((event.currentTarget as HTMLSelectElement).value);
+      settings = { ...settings, upcomingAbilities: count };
       saveSettings(settings);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(upcomingAbilities));
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(count));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-border-thickness")?.addEventListener("input", (event) => {
       const cueBorderThickness = Number((event.currentTarget as HTMLInputElement).value);
       settings = { ...settings, cueBorderThickness };
       saveSettings(settings);
-      alt1Overlay.setBorderThickness(cueBorderThickness);
-      redrawActionBarCue();
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setBorder(cueBorderThickness);
+      drawSlot();
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-border-color")?.addEventListener("input", (event) => {
       const cueBorderColor = (event.currentTarget as HTMLInputElement).value;
       settings = { ...settings, cueBorderColor };
       saveSettings(settings);
-      alt1Overlay.setBorderColor(cueBorderColor);
-      redrawActionBarCue();
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setBorderColor(cueBorderColor);
+      drawSlot();
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-overlay-opacity")?.addEventListener("change", (event) => {
       const overlayOpacity = (event.currentTarget as HTMLInputElement).checked ? 50 : 100;
       settings = { ...settings, overlayOpacity };
       saveSettings(settings);
-      alt1Overlay.setOpacity(overlayOpacity);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setOpacity(overlayOpacity);
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-show-ability-names")?.addEventListener("change", (event) => {
       const showAbilityNames = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, showAbilityNames };
       saveSettings(settings);
-      alt1Overlay.setShowAbilityNames(showAbilityNames);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setNames(showAbilityNames);
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-show-next-label")?.addEventListener("change", (event) => {
       const showNextLabel = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, showNextLabel };
       saveSettings(settings);
-      alt1Overlay.setShowNextLabel(showNextLabel);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setKeybindVisible(showNextLabel);
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-auto-advance")?.addEventListener("change", (event) => {
       const autoAdvanceRotation = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, autoAdvanceRotation };
       saveSettings(settings);
-      alt1Overlay.setAutoAdvance(autoAdvanceRotation);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      cueOverlay.setAutoAdvance(autoAdvanceRotation);
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
       if (!autoAdvanceRotation) {
-        stopExpectedTracking();
-      } else if (state.activeRotation) {
-        if (scanResult?.recognized) startExpectedTracking();
-        else void runFullScan(false);
+        stopTracking();
+      } else if (state.active) {
+        if (scanResult?.recognized) startTracking();
+        else void scanBars(false);
       }
     });
     root.querySelector<HTMLInputElement>("#settings-loop-rotation")?.addEventListener("change", (event) => {
       const loopRotationAtEnd = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, loopRotationAtEnd };
       saveSettings(settings);
-      if (settings.showCueOverlay && !overlayPlacementActive) {
-        void alt1Overlay.draw(upcomingCues(settings.upcomingAbilities));
+      if (settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
     root.querySelector<HTMLInputElement>("#settings-show-diagnostics")?.addEventListener("change", (event) => {
@@ -624,9 +634,9 @@ export function mountApp(root: HTMLElement, state: AppState): void {
       const panel = root.querySelector<HTMLElement>(".diagnostics-panel");
       if (panel) panel.hidden = !checked;
     });
-    if (activatedRotationId && isAlt1Available()) {
+    if (activatedId && isAlt1Available()) {
       window.setTimeout(() => {
-        if (state.activeRotationId === activatedRotationId) void runFullScan(false);
+        if (state.activeId === activatedId) void scanBars(false);
       }, 0);
     }
   };
@@ -634,8 +644,8 @@ export function mountApp(root: HTMLElement, state: AppState): void {
   document.addEventListener("keydown", (event) => {
     if (!settingsOpen || event.code !== "Escape") return;
     event.preventDefault();
-    if (visualKeybindsOpen) {
-      visualKeybindsOpen = false;
+    if (keybindsOpen) {
+      keybindsOpen = false;
       render();
       root.querySelector<HTMLButtonElement>("#settings-visual-keybinds")?.focus();
       return;
@@ -644,24 +654,24 @@ export function mountApp(root: HTMLElement, state: AppState): void {
     render();
   });
 
-  const clearOverlayForShutdown = (): void => {
-    a1lib.removeListener("alt1pressed", alt1CueKeybindListener);
-    stopExpectedTracking();
-    stopOverlayPlacement(false);
-    alt1Overlay.clear();
-    actionBarCueOverlay.clear();
-    window.clearInterval(overlayKeepaliveTimer);
-    if (footerMessageTimer !== null) window.clearTimeout(footerMessageTimer);
+  const cleanup = (): void => {
+    a1lib.removeListener("alt1pressed", keybindListener);
+    stopTracking();
+    stopPlacement(false);
+    cueOverlay.clear();
+    slotOverlay.clear();
+    window.clearInterval(keepaliveTimer);
+    if (footerTimer !== null) window.clearTimeout(footerTimer);
   };
-  window.addEventListener("pagehide", clearOverlayForShutdown);
-  window.addEventListener("beforeunload", clearOverlayForShutdown);
+  window.addEventListener("pagehide", cleanup);
+  window.addEventListener("beforeunload", cleanup);
 
   state.subscribe(render);
   render();
 }
 
-function cleanScreenPoint(value: unknown): ScreenPoint | null {
-  const point = value as Partial<ScreenPoint> | null | undefined;
+function cleanPoint(value: unknown): Point | null {
+  const point = value as Partial<Point> | null | undefined;
   const x = Number(point?.x);
   const y = Number(point?.y);
   return Number.isFinite(x) && Number.isFinite(y)

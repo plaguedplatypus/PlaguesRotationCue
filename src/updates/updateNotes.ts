@@ -4,7 +4,7 @@ export interface ReleaseNote {
   items: string[];
 }
 
-export const RELEASE_HISTORY: ReleaseNote[] = [
+export const releases: ReleaseNote[] = [
   {
     version: "1.1.2",
     title: "Sequence Abilities",
@@ -53,8 +53,8 @@ export const RELEASE_HISTORY: ReleaseNote[] = [
   }
 ];
 
-export function latestReleaseNote(): ReleaseNote | null {
-  return RELEASE_HISTORY[0] ?? null;
+export function latestRelease(): ReleaseNote | null {
+  return releases[0] ?? null;
 }
 
-export const ROTATION_CUE_VERSION = latestReleaseNote()?.version ?? "0.0.0";
+export const appVersion = latestRelease()?.version ?? "0.0.0";

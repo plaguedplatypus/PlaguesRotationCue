@@ -1,47 +1,47 @@
-import { abilityById, rotationEntryById } from "../data/abilityData";
-import type { AbilityScanResult, DetectedSlot, ExpectedAbilityObservation } from "../types";
+import { abilityById, entryById } from "../data/abilityData";
+import type { ScanResult, DetectedSlot, Observation } from "../types";
 
-export interface DiagnosticsViewState {
-  result: AbilityScanResult | null;
+export interface ViewState {
+  result: ScanResult | null;
   scanning: boolean;
   expectedAbilityId: string | undefined;
   currentStepIndex: number;
   rotationStepCount: number;
   trackingEnabled: boolean;
-  observation: ExpectedAbilityObservation | null;
+  observation: Observation | null;
   alt1Available: boolean;
 }
 
-interface DiagnosticsPanelState extends DiagnosticsViewState {
+interface PanelState extends ViewState {
   open: boolean;
   visible: boolean;
 }
 
-export function diagnosticsPanelMarkup(state: DiagnosticsPanelState): string {
+export function panelMarkup(state: PanelState): string {
   return `
     <details class="diagnostics-panel" ${state.open ? "open" : ""} ${state.visible ? "" : "hidden"}>
       <summary>
-        <span><b>Diagnostics</b><small>${diagnosticsStatus(state)}</small></span>
+        <span><b>Diagnostics</b><small>${statusText(state)}</small></span>
         <span class="details-chevron">▾</span>
       </summary>
-      <div class="diagnostics-body">${diagnosticsBodyMarkup(state)}</div>
+      <div class="diagnostics-body">${bodyMarkup(state)}</div>
     </details>`;
 }
 
-export function diagnosticsBodyMarkup(state: DiagnosticsViewState): string {
+export function bodyMarkup(state: ViewState): string {
   return `
     <div class="diagnostics-heading">
       <div><p class="section-kicker">DIAGNOSTICS</p><h2 id="diagnostics-heading">Action-bar detection</h2></div>
       <button class="button button-accent" id="scan-action-bars" type="button" ${!state.alt1Available || state.scanning ? "disabled" : ""}>${state.scanning ? "Scanning…" : "Full scan"}</button>
     </div>
-    ${diagnosticsMarkup(state)}`;
+    ${markup(state)}`;
 }
 
-export function diagnosticsStatus(state: Pick<DiagnosticsViewState, "trackingEnabled" | "alt1Available">): string {
+export function statusText(state: Pick<ViewState, "trackingEnabled" | "alt1Available">): string {
   return state.trackingEnabled ? "Tracking" : state.alt1Available ? "Ready" : "Browser mode";
 }
 
-function diagnosticsMarkup(state: DiagnosticsViewState): string {
+function markup(state: ViewState): string {
   if (state.scanning) {
     return `<div class="diagnostics-empty"><span class="scan-pulse"></span><p>Locating visible bars and comparing slot icons…</p></div>`;
   }
@@ -61,34 +61,34 @@ function diagnosticsMarkup(state: DiagnosticsViewState): string {
         <div><strong>${state.result.durationMs}<small> ms</small></strong><span>Scan time</span></div>
       </div>`;
 
-  const visibleRows = state.result?.slots.map(slotMarkup).join("") ?? "";
+  const visibleRows = state.result?.slots.map(slotRow).join("") ?? "";
   return `
     ${discovery}
-    ${trackingMarkup(state, Boolean(state.result?.recognized))}
+    ${trackingCard(state, Boolean(state.result?.recognized))}
     ${visibleRows ? `<div class="detected-list" role="list">${visibleRows}</div>` : ""}
   `;
 }
 
-function trackingMarkup(state: DiagnosticsViewState, hasDiscovery: boolean): string {
-  const entry = state.expectedAbilityId ? rotationEntryById.get(state.expectedAbilityId) : undefined;
+function trackingCard(state: ViewState, hasDiscovery: boolean): string {
+  const entry = state.expectedAbilityId ? entryById.get(state.expectedAbilityId) : undefined;
   const ability = state.expectedAbilityId ? abilityById.get(state.expectedAbilityId) : undefined;
   const trackingState = state.observation?.state ?? (state.trackingEnabled ? "acquiring-baseline" : "unavailable");
   const canTrack = state.alt1Available && hasDiscovery && Boolean(ability);
-  const cooldownRaw = state.observation?.cooldownRawText || "—";
-  const cooldownSeconds = state.observation?.cooldownSeconds !== undefined
-    ? `${state.observation.cooldownSeconds} s`
+  const cooldownRaw = state.observation?.cooldownText || "—";
+  const cooldownSeconds = state.observation?.cooldown !== undefined
+    ? `${state.observation.cooldown} s`
     : "—";
-  const identity = state.observation ? `${Math.round(state.observation.identitySimilarity * 100)}%` : "—";
+  const identity = state.observation ? `${Math.round(state.observation.similarity * 100)}%` : "—";
   const brightness = state.observation?.brightnessRatio !== undefined
     ? `${Math.round(state.observation.brightnessRatio * 100)}%`
     : "—";
   const gcdTransient = state.observation ? (state.observation.gcdTransient ? "YES" : "No") : "—";
   const cooldownFrames = state.observation?.cooldownFrames ?? 0;
   const useEvent = state.observation
-    ? `${state.observation.useEvent ? "YES" : "No"} · ${state.observation.useEventCount}`
+    ? `${state.observation.used ? "YES" : "No"} · ${state.observation.useCount}`
     : "No · 0";
-  const latency = state.observation?.detectionLatencyMs !== undefined
-    ? `${state.observation.detectionLatencyMs} ms`
+  const latency = state.observation?.latencyMs !== undefined
+    ? `${state.observation.latencyMs} ms`
     : "—";
   const slotFound = state.observation ? (state.observation.slotFound ? "Found" : "Missing") : "—";
   const armed = state.observation ? (state.observation.armed ? "ARMED" : "Disarmed") : "—";
@@ -127,7 +127,7 @@ function trackingMarkup(state: DiagnosticsViewState, hasDiscovery: boolean): str
         <div><strong>${cooldownSeconds}</strong><span>Parsed cooldown</span></div>
         <div><strong>${cooldownFrames}</strong><span>Cooldown frames</span></div>
         <div><strong>${useEvent}</strong><span>Use event · total</span></div>
-        <div><strong>${state.observation?.observationMs ?? "—"}${state.observation ? " ms" : ""}</strong><span>Sample time</span></div>
+        <div><strong>${state.observation?.sampleMs ?? "—"}${state.observation ? " ms" : ""}</strong><span>Sample time</span></div>
         <div><strong>${latency}</strong><span>Last latency</span></div>
       </div>
       <div class="tracking-controls">
@@ -136,7 +136,7 @@ function trackingMarkup(state: DiagnosticsViewState, hasDiscovery: boolean): str
     </article>`;
 }
 
-function slotMarkup(slot: DetectedSlot): string {
+function slotRow(slot: DetectedSlot): string {
   const ability = slot.abilityId ? abilityById.get(slot.abilityId) : undefined;
   const confidence = `${Math.round(slot.confidence * 100)}%`;
   const margin = `${Math.round(slot.margin * 100)}% margin`;

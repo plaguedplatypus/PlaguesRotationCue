@@ -1,37 +1,37 @@
-import type { AbilityDefinition, AbilityStyle, RotationCategory } from "../types";
+import type { Ability, Style, Category } from "../types";
 import {
-  ACTION_BAR_SEQUENCES,
-  CATALOG_SECTIONS,
-  COMBAT_CATEGORY_PRESENTATION,
-  PICKER_SECTIONS,
-  type CatalogCategories,
-  type PickerSectionId
+  sequences as catalogSequences,
+  sections,
+  categoryUi,
+  pickers,
+  type CategoryScope,
+  type PickerId
 } from "./catalog";
 
-export type { PickerSectionId } from "./catalog";
+export type { PickerId } from "./catalog";
 
-export interface RotationCatalogEntry {
+export interface CatalogItem {
   id: string;
   name: string;
   icon: string;
-  pickerSection: PickerSectionId;
-  style?: AbilityStyle;
+  pickerSection: PickerId;
+  style?: Style;
   cooldownSeconds?: number;
   scannable: boolean;
 }
 
-export interface PickerSectionDefinition {
-  id: PickerSectionId;
+export interface PickerDef {
+  id: PickerId;
   label: string;
   icon: string;
 }
 
-interface CatalogEntryMetadata {
-  catalogSectionId: string;
-  categories: CatalogCategories;
+interface EntryContext {
+  sectionId: string;
+  categories: CategoryScope;
 }
 
-const VALID_CATEGORIES = new Set<RotationCategory>([
+const validCategories = new Set<Category>([
   "melee",
   "magic",
   "ranged",
@@ -39,26 +39,26 @@ const VALID_CATEGORIES = new Set<RotationCategory>([
   "hybrid"
 ]);
 
-validateCatalog();
+validate();
 
-const derivedCatalog = CATALOG_SECTIONS.flatMap((section) => section.entries.map((entry) => ({
+const entries = sections.flatMap((section) => section.entries.map((entry) => ({
   id: entry.id,
   name: entry.name ?? titleFromId(entry.id),
-  icon: entry.icon ?? `./assets/${section.assetDirectory}/${entry.id}.png`,
+  icon: entry.icon ?? `./assets/${section.assetDir}/${entry.id}.png`,
   pickerSection: section.pickerSection,
   style: entry.style ?? section.style,
   cooldownSeconds: entry.cooldownSeconds,
-  scannable: entry.scannable ?? section.defaultScannable ?? false,
-  catalogSectionId: section.id,
+  scannable: entry.scannable ?? section.scanByDefault ?? false,
+  sectionId: section.id,
   categories: section.categories
 })));
 
-const metadataById = new Map<string, CatalogEntryMetadata>(derivedCatalog.map((entry) => [
+const contextById = new Map<string, EntryContext>(entries.map((entry) => [
   entry.id,
-  { catalogSectionId: entry.catalogSectionId, categories: entry.categories }
+  { sectionId: entry.sectionId, categories: entry.categories }
 ]));
 
-function runtimeEntry(entry: typeof derivedCatalog[number]): RotationCatalogEntry {
+function toItem(entry: typeof entries[number]): CatalogItem {
   return {
     id: entry.id,
     name: entry.name,
@@ -70,12 +70,12 @@ function runtimeEntry(entry: typeof derivedCatalog[number]): RotationCatalogEntr
   };
 }
 
-// Scannable catalog metadata is the single source of truth for scanner templates.
-const abilityCatalog = derivedCatalog
+// Scannable catalog is the source for scanner templates. Can change if something is scanned by adding "scannable: false" to entries.
+const scannable = entries
   .filter((entry) => entry.scannable)
-  .sort(compareNames);
+  .sort(byName);
 
-export const abilities: AbilityDefinition[] = abilityCatalog.map((entry) => ({
+export const abilities: Ability[] = scannable.map((entry) => ({
   id: entry.id,
   name: entry.name,
   style: entry.style ?? "Utility",
@@ -85,10 +85,10 @@ export const abilities: AbilityDefinition[] = abilityCatalog.map((entry) => ({
 
 export const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
 
-const actionBarSequenceByAbilityId = new Map<string, readonly string[]>();
-const actionBarUseTransitionByAbilityId = new Map<string, string>();
-const actionBarSequenceCooldownByAbilityId = new Map<string, number>();
-for (const sequence of ACTION_BAR_SEQUENCES) {
+const sequenceById = new Map<string, readonly string[]>();
+const nextById = new Map<string, string>();
+const cooldownById = new Map<string, number>();
+for (const sequence of catalogSequences) {
   if (sequence.abilityIds.length < 2) {
     throw new Error("Action-bar sequences must contain at least two abilities.");
   }
@@ -99,12 +99,12 @@ for (const sequence of ACTION_BAR_SEQUENCES) {
     if (!abilityById.has(abilityId)) {
       throw new Error(`Action-bar sequence uses unknown or unscannable ability ${abilityId}.`);
     }
-    if (actionBarSequenceByAbilityId.has(abilityId)) {
+    if (sequenceById.has(abilityId)) {
       throw new Error(`Ability ${abilityId} belongs to more than one action-bar sequence.`);
     }
-    actionBarSequenceByAbilityId.set(abilityId, sequence.abilityIds);
+    sequenceById.set(abilityId, sequence.abilityIds);
     if (sequence.cooldownSeconds !== undefined) {
-      actionBarSequenceCooldownByAbilityId.set(abilityId, sequence.cooldownSeconds);
+      cooldownById.set(abilityId, sequence.cooldownSeconds);
     }
   }
   for (const [fromAbilityId, toAbilityId] of sequence.useTransitions) {
@@ -112,71 +112,71 @@ for (const sequence of ACTION_BAR_SEQUENCES) {
       || !sequence.abilityIds.includes(toAbilityId)) {
       throw new Error(`Action-bar sequence contains invalid transition ${fromAbilityId} -> ${toAbilityId}.`);
     }
-    if (actionBarUseTransitionByAbilityId.has(fromAbilityId)) {
+    if (nextById.has(fromAbilityId)) {
       throw new Error(`Ability ${fromAbilityId} has more than one action-bar use transition.`);
     }
-    actionBarUseTransitionByAbilityId.set(fromAbilityId, toAbilityId);
+    nextById.set(fromAbilityId, toAbilityId);
   }
 }
 
-export function actionBarSequenceForAbility(abilityId: string): readonly string[] | undefined {
-  return actionBarSequenceByAbilityId.get(abilityId);
+export function sequenceFor(abilityId: string): readonly string[] | undefined {
+  return sequenceById.get(abilityId);
 }
 
-export function actionBarBindingAbilityId(abilityId: string): string {
-  return actionBarSequenceForAbility(abilityId)?.[0] ?? abilityId;
+export function bindingId(abilityId: string): string {
+  return sequenceFor(abilityId)?.[0] ?? abilityId;
 }
 
-export function nextActionBarSequenceAbilityId(abilityId: string): string | undefined {
-  return actionBarUseTransitionByAbilityId.get(abilityId);
+export function nextSequenceId(abilityId: string): string | undefined {
+  return nextById.get(abilityId);
 }
 
-export function actionBarSequenceCooldownSeconds(abilityId: string): number | undefined {
-  return actionBarSequenceCooldownByAbilityId.get(abilityId);
+export function sequenceCooldown(abilityId: string): number | undefined {
+  return cooldownById.get(abilityId);
 }
 
-export const rotationCatalog: RotationCatalogEntry[] = derivedCatalog
-  .map(runtimeEntry)
-  .sort(compareNames);
+export const catalog: CatalogItem[] = entries
+  .map(toItem)
+  .sort(byName);
 
-export const rotationEntryById = new Map(rotationCatalog.map((entry) => [entry.id, entry]));
+export const entryById = new Map(catalog.map((entry) => [entry.id, entry]));
 
-export const pickerSectionIds: PickerSectionId[] = PICKER_SECTIONS.map((section) => section.id);
+export const pickerIds: PickerId[] = pickers.map((section) => section.id);
 
-const pickerSectionById = new Map(PICKER_SECTIONS.map((section) => [section.id, section]));
+const pickerById = new Map(pickers.map((section) => [section.id, section]));
 
-export function pickerSectionDefinition(
-  section: PickerSectionId,
-  category: RotationCategory
-): PickerSectionDefinition {
+export function pickerDef(
+  section: PickerId,
+  category: Category
+): PickerDef {
   if (section === "combat") {
-    const presentation = COMBAT_CATEGORY_PRESENTATION[category];
+    const presentation = categoryUi[category];
     return { id: section, label: presentation.label, icon: presentation.icon };
   }
 
-  const definition = pickerSectionById.get(section)!;
+  const definition = pickerById.get(section)!;
   return { id: section, label: definition.label, icon: definition.icon };
 }
 
-export function pickerSectionsForCategory(category: RotationCategory): PickerSectionId[] {
-  return PICKER_SECTIONS
-    .filter((section) => shownInCategory(section.categories, category))
+export function pickerSectionsFor(category: Category): PickerId[] {
+  return pickers
+    .filter((section) => shownIn(section.categories, category))
     .map((section) => section.id);
 }
 
-export function catalogEntriesForSection(
-  section: PickerSectionId,
-  category: RotationCategory
-): RotationCatalogEntry[] {
-  return rotationCatalog.filter((entry) => entry.pickerSection === section
-    && shownInCategory(metadataById.get(entry.id)!.categories, category));
+export function entriesForSection(
+  section: PickerId,
+  category: Category
+): CatalogItem[] {
+  return catalog.filter((entry) => entry.pickerSection === section
+    && shownIn(contextById.get(entry.id)!.categories, category));
 }
 
-function shownInCategory(categories: CatalogCategories, category: RotationCategory): boolean {
+function shownIn(categories: CategoryScope, category: Category): boolean {
   return categories === "all" || categories.includes(category);
 }
 
-function compareNames(left: { name: string }, right: { name: string }): number {
+function byName(left: { name: string }, right: { name: string }): number {
   return left.name.localeCompare(right.name);
 }
 
@@ -187,30 +187,30 @@ function titleFromId(id: string): string {
     .join(" ");
 }
 
-function validateCatalog(): void {
-  const pickerIds = new Set<PickerSectionId>();
-  for (const picker of PICKER_SECTIONS) {
+function validate(): void {
+  const pickerIds = new Set<PickerId>();
+  for (const picker of pickers) {
     if (pickerIds.has(picker.id)) throw new Error(`Duplicate picker section ID: ${picker.id}`);
     pickerIds.add(picker.id);
-    validateCategories(`Picker section ${picker.id}`, picker.categories);
+    validateScope(`Picker section ${picker.id}`, picker.categories);
   }
 
   const sectionIds = new Set<string>();
   const entryIds = new Set<string>();
-  for (const section of CATALOG_SECTIONS) {
+  for (const section of sections) {
     if (!section.id.trim()) throw new Error("Catalog section IDs cannot be empty.");
     if (sectionIds.has(section.id)) throw new Error(`Duplicate catalog section ID: ${section.id}`);
     if (!pickerIds.has(section.pickerSection)) {
       throw new Error(`Catalog section ${section.id} uses unknown picker section ${section.pickerSection}.`);
     }
-    if (!section.assetDirectory.trim()) {
+    if (!section.assetDir.trim()) {
       throw new Error(`Catalog section ${section.id} must define an asset directory.`);
     }
     if (section.pickerSection !== "item" && section.pickerSection !== "cue" && !section.style) {
       throw new Error(`Catalog section ${section.id} must define an ability style.`);
     }
     sectionIds.add(section.id);
-    validateCategories(`Catalog section ${section.id}`, section.categories);
+    validateScope(`Catalog section ${section.id}`, section.categories);
 
     for (const entry of section.entries) {
       if (!entry.id.trim()) throw new Error(`Catalog section ${section.id} contains an empty entry ID.`);
@@ -220,10 +220,10 @@ function validateCatalog(): void {
   }
 }
 
-function validateCategories(owner: string, categories: CatalogCategories): void {
+function validateScope(owner: string, categories: CategoryScope): void {
   if (categories === "all") return;
   if (!categories.length) throw new Error(`${owner} must include at least one category.`);
   for (const category of categories) {
-    if (!VALID_CATEGORIES.has(category)) throw new Error(`${owner} uses unknown category ${category}.`);
+    if (!validCategories.has(category)) throw new Error(`${owner} uses unknown category ${category}.`);
   }
 }

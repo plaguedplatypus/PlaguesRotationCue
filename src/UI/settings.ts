@@ -1,13 +1,13 @@
-import type { ScreenPoint } from "../types";
-import { ROTATION_CUE_VERSION } from "../updates/updateNotes";
+import type { Point } from "../types";
+import { appVersion } from "../updates/updateNotes";
 
-const SETTINGS_KEY = "rotation-cue.interface-settings.v1";
+const storageKey = "rotation-cue.interface-settings.v1";
 
-export interface RotationCueSettings {
+export interface Settings {
   autoAdvanceRotation: boolean;
   loopRotationAtEnd: boolean;
   showCueOverlay: boolean;
-  overlayPosition: ScreenPoint | null;
+  overlayPosition: Point | null;
   cueScale: number;
   upcomingAbilities: number;
   cueBorderThickness: number;
@@ -18,7 +18,7 @@ export interface RotationCueSettings {
   showDiagnostics: boolean;
 }
 
-const defaultSettings: RotationCueSettings = {
+const defaults: Settings = {
   autoAdvanceRotation: true,
   loopRotationAtEnd: true,
   showCueOverlay: true,
@@ -33,72 +33,72 @@ const defaultSettings: RotationCueSettings = {
   showDiagnostics: false
 };
 
-export function loadSettings(): RotationCueSettings {
+export function loadSettings(): Settings {
   try {
-    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<RotationCueSettings> | null;
-    const settings: RotationCueSettings = {
+    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<Settings> | null;
+    const settings: Settings = {
       autoAdvanceRotation: typeof stored?.autoAdvanceRotation === "boolean"
         ? stored.autoAdvanceRotation
-        : defaultSettings.autoAdvanceRotation,
+        : defaults.autoAdvanceRotation,
       loopRotationAtEnd: typeof stored?.loopRotationAtEnd === "boolean"
         ? stored.loopRotationAtEnd
-        : defaultSettings.loopRotationAtEnd,
+        : defaults.loopRotationAtEnd,
       showCueOverlay: typeof stored?.showCueOverlay === "boolean"
         ? stored.showCueOverlay
-        : defaultSettings.showCueOverlay,
-      overlayPosition: cleanScreenPoint(stored?.overlayPosition),
-      cueScale: cleanRange(stored?.cueScale, 25, 100, defaultSettings.cueScale),
-      upcomingAbilities: cleanRange(stored?.upcomingAbilities, 1, 4, defaultSettings.upcomingAbilities),
-      cueBorderThickness: cleanRange(stored?.cueBorderThickness, 0, 3, defaultSettings.cueBorderThickness),
-      cueBorderColor: cleanColor(stored?.cueBorderColor, defaultSettings.cueBorderColor),
+        : defaults.showCueOverlay,
+      overlayPosition: cleanPoint(stored?.overlayPosition),
+      cueScale: cleanRange(stored?.cueScale, 25, 100, defaults.cueScale),
+      upcomingAbilities: cleanRange(stored?.upcomingAbilities, 1, 4, defaults.upcomingAbilities),
+      cueBorderThickness: cleanRange(stored?.cueBorderThickness, 0, 3, defaults.cueBorderThickness),
+      cueBorderColor: cleanColor(stored?.cueBorderColor, defaults.cueBorderColor),
       overlayOpacity: cleanOpacity(stored?.overlayOpacity),
       showAbilityNames: typeof stored?.showAbilityNames === "boolean"
         ? stored.showAbilityNames
-        : defaultSettings.showAbilityNames,
+        : defaults.showAbilityNames,
       showNextLabel: typeof stored?.showNextLabel === "boolean"
         ? stored.showNextLabel
-        : defaultSettings.showNextLabel,
+        : defaults.showNextLabel,
       showDiagnostics: typeof stored?.showDiagnostics === "boolean"
         ? stored.showDiagnostics
-        : defaultSettings.showDiagnostics
+        : defaults.showDiagnostics
     };
     saveSettings(settings);
     return settings;
   } catch {
-    return { ...defaultSettings };
+    return { ...defaults };
   }
 }
 
-export function saveSettings(settings: RotationCueSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+export function saveSettings(settings: Settings): void {
+  localStorage.setItem(storageKey, JSON.stringify(settings));
 }
 
-export function settingsModalMarkup(settings: RotationCueSettings, positioningOverlay = false): string {
+export function modalMarkup(settings: Settings, positioning = false): string {
   return `
     <div class="settings-backdrop" id="settings-backdrop">
       <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header class="settings-modal-heading">
           <h2 id="settings-title">Settings</h2>
           <div class="settings-release-links">
-            <span class="settings-version-label">version ${ROTATION_CUE_VERSION}</span>
+            <span class="settings-version-label">v${appVersion}</span>
             <button class="settings-patch-notes" id="show-patch-notes" type="button" title="Show Patch Notes">Patch Notes</button>
           </div>
           <button class="settings-modal-close" id="close-settings" type="button" title="Close settings" aria-label="Close settings">x</button>
         </header>
         <div class="settings-modal-body">
-          ${settingsSection("Automation", `
+          ${sectionMarkup("Automation", `
             ${toggleRow("Auto-advance rotation", "settings-auto-advance", settings.autoAdvanceRotation)}
             ${toggleRow("Loop rotation at end", "settings-loop-rotation", settings.loopRotationAtEnd)}
           `)}
 
-          ${settingsSection("Cue Overlay", `
+          ${sectionMarkup("Cue Overlay", `
             ${toggleRow("Show cue overlay", "settings-show-overlay", settings.showCueOverlay)}
             <div class="settings-row">
               <span class="settings-label">Change overlay position</span>
               <button class="settings-action" id="settings-reposition-overlay" type="button"
-                ${!settings.showCueOverlay || positioningOverlay ? "disabled" : ""}>${positioningOverlay ? "Waiting for Alt+1" : "Reposition Overlay"}</button>
+                ${!settings.showCueOverlay || positioning ? "disabled" : ""}>${positioning ? "Waiting for Alt+1" : "Reposition Overlay"}</button>
             </div>
-            <p class="settings-hint" id="settings-overlay-position-status">${positioningOverlay
+            <p class="settings-hint" id="settings-overlay-position-status">${positioning
               ? "Move the preview with your cursor, then press Alt+1."
               : settings.overlayPosition ? "Custom position saved." : "Using the default position."}</p>
             ${rangeRow("Cue scale", "settings-cue-scale", 55, 100, 5, settings.cueScale, "%")}
@@ -114,17 +114,17 @@ export function settingsModalMarkup(settings: RotationCueSettings, positioningOv
             </div>
           `)}
 
-          ${settingsSection("Interface", `
+          ${sectionMarkup("Interface", `
             ${toggleRow("Show Diagnostics", "settings-show-diagnostics", settings.showDiagnostics)}
           `)}
 
-          ${settingsSection("Keybind", `
+          ${sectionMarkup("Keybind", `
             <div class="settings-keybind-list" aria-label="Cue keybinds">
               ${keybindRow("Next Cue", "Advance to the next rotation cue.", "Alt+1")}
             </div>
           `)}
 
-          ${settingsSection("Support", `
+          ${sectionMarkup("Support", `
             <div class="support-links">
               <a class="support-link" href="https://ko-fi.com/plaguedplatypus" target="_blank" rel="noopener noreferrer">
                 <img src="./assets/coffee.png" alt="" />
@@ -141,8 +141,8 @@ export function settingsModalMarkup(settings: RotationCueSettings, positioningOv
     </div>`;
 }
 
-function cleanScreenPoint(value: unknown): ScreenPoint | null {
-  const point = value as Partial<ScreenPoint> | null | undefined;
+function cleanPoint(value: unknown): Point | null {
+  const point = value as Partial<Point> | null | undefined;
   const x = Number(point?.x);
   const y = Number(point?.y);
   return Number.isFinite(x) && Number.isFinite(y)
@@ -150,16 +150,16 @@ function cleanScreenPoint(value: unknown): ScreenPoint | null {
     : null;
 }
 
-function cleanRange(value: unknown, minimum: number, maximum: number, fallback: number): number {
+function cleanRange(value: unknown, min: number, max: number, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number)
-    ? Math.max(minimum, Math.min(maximum, Math.round(number)))
+    ? Math.max(min, Math.min(max, Math.round(number)))
     : fallback;
 }
 
 function cleanOpacity(value: unknown): number {
   const number = Number(value);
-  if (!Number.isFinite(number)) return defaultSettings.overlayOpacity;
+  if (!Number.isFinite(number)) return defaults.overlayOpacity;
   return number <= 75 ? 50 : 100;
 }
 
@@ -168,7 +168,7 @@ function cleanColor(value: unknown, fallback: string): string {
   return /^#[0-9a-f]{6}$/.test(color) ? color : fallback;
 }
 
-export function bindSettingsShell(container: ParentNode): void {
+export function bindRanges(container: ParentNode): void {
   container.querySelectorAll<HTMLInputElement>(".settings-range").forEach((input) => {
     const output = input.parentElement?.querySelector<HTMLOutputElement>("output");
     if (!output) return;
@@ -178,7 +178,7 @@ export function bindSettingsShell(container: ParentNode): void {
   });
 }
 
-function settingsSection(title: string, content: string): string {
+function sectionMarkup(title: string, content: string): string {
   return `
     <section class="settings-section">
       <h3>${title}</h3>

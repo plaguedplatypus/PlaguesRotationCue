@@ -1,19 +1,19 @@
 import {
-  catalogEntriesForSection,
-  pickerSectionDefinition,
-  pickerSectionsForCategory,
-  rotationEntryById
+  entriesForSection,
+  pickerDef,
+  pickerSectionsFor,
+  entryById
 } from "../data/abilityData";
-import type { PickerSectionId, RotationCatalogEntry } from "../data/abilityData";
+import type { PickerId, CatalogItem } from "../data/abilityData";
 import {
-  loadCollapsedRotationIds,
-  saveCollapsedRotationIds
+  loadCollapsedIds,
+  saveCollapsedIds
 } from "../rotation/storage";
-import { parseRotationTransfer, serializeRotation } from "../rotation/transfer";
-import type { AppState } from "../state";
-import type { Rotation, RotationCategory } from "../types";
+import { parse, serialize } from "../rotation/transfer";
+import type { State } from "../state";
+import type { Rotation, Category } from "../types";
 
-const categoryLabels: Record<RotationCategory, string> = {
+const labels: Record<Category, string> = {
   melee: "Melee",
   magic: "Magic",
   ranged: "Ranged",
@@ -21,101 +21,101 @@ const categoryLabels: Record<RotationCategory, string> = {
   hybrid: "Hybrid"
 };
 
-const collapsedRotations = new Set(loadCollapsedRotationIds());
+const collapsed = new Set(loadCollapsedIds());
 let picker: { rotationId: string; replaceIndex: number | null } | null = null;
-let deleteConfirmationRotationId: string | null = null;
+let deleteId: string | null = null;
 
-export type RotationEditorContext = {
+export type EditorContext = {
   currentIndex: number;
   canScan: boolean;
-  scanInProgress: boolean;
+  scanning: boolean;
   onScan: () => void;
   onPrevious: () => void;
   onNext: () => void;
   onReset: () => void;
-  onTransferMessage: (message: string) => void;
+  onMessage: (message: string) => void;
 };
 
 export function renderEditor(
   container: HTMLElement,
-  state: AppState,
-  context: RotationEditorContext
+  state: State,
+  context: EditorContext
 ): void {
   container.replaceChildren();
 
-  const libraryControls = document.createElement("section");
-  libraryControls.className = "rotation-library-controls";
+  const library = document.createElement("section");
+  library.className = "rotation-library-controls";
 
   const tabs = document.createElement("nav");
   tabs.className = "combat-tabs";
   tabs.setAttribute("aria-label", "Rotation category");
-  (Object.keys(categoryLabels) as RotationCategory[]).forEach((category) => {
+  (Object.keys(labels) as Category[]).forEach((category) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = category === state.selectedCategory ? "is-selected" : "";
-    button.textContent = categoryLabels[category];
+    button.className = category === state.category ? "is-selected" : "";
+    button.textContent = labels[category];
     button.addEventListener("click", () => state.selectCategory(category));
     tabs.append(button);
   });
 
-  const libraryHeader = document.createElement("div");
-  libraryHeader.className = "rotation-library-heading";
+  const header = document.createElement("div");
+  header.className = "rotation-library-heading";
   const title = document.createElement("div");
-  title.innerHTML = `<strong>Rotation library</strong><small>${categoryLabels[state.selectedCategory]}</small>`;
+  title.innerHTML = `<strong>Rotation library</strong><small>${labels[state.category]}</small>`;
   const addRotation = document.createElement("button");
   addRotation.type = "button";
   addRotation.className = "compact-button";
   addRotation.textContent = "Add New Rotation";
-  addRotation.addEventListener("click", () => state.createRotation());
-  libraryHeader.append(title, addRotation);
+  addRotation.addEventListener("click", () => state.create());
+  header.append(title, addRotation);
 
-  libraryControls.append(tabs, libraryHeader);
+  library.append(tabs, header);
 
-  const rotationList = document.createElement("div");
-  rotationList.className = "rotation-library-scroll";
-  container.append(libraryControls, rotationList);
+  const list = document.createElement("div");
+  list.className = "rotation-library-scroll";
+  container.append(library, list);
 
-  const categoryRotations = state.rotations.filter((rotation) => rotation.category === state.selectedCategory);
-  if (!categoryRotations.length) {
+  const rotations = state.rotations.filter((rotation) => rotation.category === state.category);
+  if (!rotations.length) {
     const empty = document.createElement("div");
     empty.className = "rotation-library-empty";
-    empty.textContent = `No ${categoryLabels[state.selectedCategory]} rotations yet.`;
-    rotationList.append(empty);
+    empty.textContent = `No ${labels[state.category]} rotations yet.`;
+    list.append(empty);
   }
 
-  categoryRotations.forEach((rotation, index) => {
-    rotationList.append(renderRotationCard(rotation, index, categoryRotations.length, state, context));
+  rotations.forEach((rotation, index) => {
+    list.append(rotationCard(rotation, index, rotations.length, state, context));
   });
 
-  if (deleteConfirmationRotationId) {
-    const rotation = state.rotations.find((candidate) => candidate.id === deleteConfirmationRotationId);
-    if (rotation) container.append(renderDeleteConfirmation(rotation, state, context));
-    else deleteConfirmationRotationId = null;
+  if (deleteId) {
+    const rotation = state.rotations.find((candidate) => candidate.id === deleteId);
+    if (rotation) container.append(deletePrompt(rotation, state, context));
+    else deleteId = null;
   }
 }
 
-function renderRotationCard(
+function rotationCard(
   rotation: Rotation,
   cardIndex: number,
   cardCount: number,
-  state: AppState,
-  context: RotationEditorContext
+  state: State,
+  context: EditorContext
 ): HTMLElement {
-  const active = rotation.id === state.activeRotationId;
-  const collapsed = collapsedRotations.has(rotation.id);
+  const active = rotation.id === state.activeId;
+  const isCollapsed = collapsed.has(rotation.id);
   const card = document.createElement("article");
   card.className = `rotation-card${active ? " is-active" : ""}`;
 
   const header = document.createElement("div");
   header.className = "rotation-card-heading";
-  const collapse = iconButton(collapsed ? "▸" : "▾", collapsed ? "Expand rotation" : "Collapse rotation", () => {
-    if (collapsed) collapsedRotations.delete(rotation.id);
-    else collapsedRotations.add(rotation.id);
-    saveCollapsedRotationIds(collapsedRotations);
+  const collapse = iconBtn(isCollapsed ? "▸" : "▾", isCollapsed ? "Expand rotation" : "Collapse rotation", () => {
+    if (isCollapsed) collapsed.delete(rotation.id);
+    else collapsed.add(rotation.id);
+    saveCollapsedIds(collapsed);
     renderEditor(card.closest(".rotation-editor") as HTMLElement, state, context);
   });
-  const up = iconButton("↑", "Move rotation up", () => state.moveRotation(rotation.id, -1));
-  const down = iconButton("↓", "Move rotation down", () => state.moveRotation(rotation.id, 1));
+  const up = iconBtn("↑", "Move rotation up", () => state.moveRotation(rotation.id, -1));
+  const down = iconBtn("↓", "Move rotation down", () => state.moveRotation(rotation.id, 1));
   up.disabled = cardIndex === 0;
   down.disabled = cardIndex === cardCount - 1;
 
@@ -124,7 +124,7 @@ function renderRotationCard(
   name.value = rotation.name;
   name.maxLength = 60;
   name.setAttribute("aria-label", "Rotation name");
-  name.addEventListener("change", () => state.renameRotation(rotation.id, name.value));
+  name.addEventListener("change", () => state.rename(rotation.id, name.value));
 
   const activate = document.createElement("button");
   activate.type = "button";
@@ -132,23 +132,23 @@ function renderRotationCard(
   activate.textContent = active ? "Deactivate" : "Activate";
   activate.title = `${active ? "Deactivate" : "Activate"} ${rotation.name}`;
   activate.setAttribute("aria-label", activate.title);
-  activate.addEventListener("click", () => state.toggleRotation(rotation.id));
+  activate.addEventListener("click", () => state.toggle(rotation.id));
 
-  const remove = iconButton("×", `Delete ${rotation.name}`, () => {
-    deleteConfirmationRotationId = rotation.id;
+  const remove = iconBtn("×", `Delete ${rotation.name}`, () => {
+    deleteId = rotation.id;
     renderEditor(card.closest(".rotation-editor") as HTMLElement, state, context);
   });
   remove.classList.add("is-danger");
   header.append(collapse, up, down, name, activate, remove);
   card.append(header);
-  if (collapsed) {
+  if (isCollapsed) {
     if (active) {
       const controls = document.createElement("div");
       controls.className = "rotation-collapsed-controls";
-      const previous = smallTextButton("← Previous", context.onPrevious);
+      const previous = textBtn("← Previous", context.onPrevious);
       previous.title = "Previous cue";
-      const reset = iconButton("↺", "Reset cue", context.onReset);
-      const next = smallTextButton("Next →", context.onNext);
+      const reset = iconBtn("↺", "Reset cue", context.onReset);
+      const next = textBtn("Next →", context.onNext);
       next.title = "Next cue";
       controls.append(previous, reset, next);
       card.append(controls);
@@ -162,21 +162,21 @@ function renderRotationCard(
   count.textContent = `${rotation.steps.length} ${rotation.steps.length === 1 ? "ability" : "abilities"}`;
   const actions = document.createElement("div");
   actions.className = "rotation-file-actions";
-  const scan = smallTextButton(context.scanInProgress ? "Scanning…" : "Scan", context.onScan);
+  const scan = textBtn(context.scanning ? "Scanning…" : "Scan", context.onScan);
   scan.classList.add("rotation-scan-button");
-  scan.disabled = !context.canScan || context.scanInProgress;
+  scan.disabled = !context.canScan || context.scanning;
   actions.append(
     scan,
-    smallTextButton("Export", () => exportRotation(rotation, context.onTransferMessage)),
-    smallTextButton("Import", () => importRotation(state, context.onTransferMessage))
+    textBtn("Export", () => exportRotation(rotation, context.onMessage)),
+    textBtn("Import", () => importRotation(state, context.onMessage))
   );
   if (active) {
     const recovery = document.createElement("div");
     recovery.className = "rotation-recovery-controls";
     recovery.append(
-      iconButton("←", "Previous cue", context.onPrevious),
-      iconButton("↺", "Reset cue", context.onReset),
-      iconButton("→", "Next cue", context.onNext)
+      iconBtn("←", "Previous cue", context.onPrevious),
+      iconBtn("↺", "Reset cue", context.onReset),
+      iconBtn("→", "Next cue", context.onNext)
     );
     meta.append(count, recovery, actions);
   } else {
@@ -194,7 +194,7 @@ function renderRotationCard(
   let playableIndex = 0;
   rotation.steps.forEach((step, index) => {
     const current = active && !!step.abilityId && playableIndex === context.currentIndex;
-    sequence.append(renderStep(rotation, index, playableIndex, current, state, context));
+    sequence.append(stepView(rotation, index, playableIndex, current, state, context));
     if (step.abilityId) playableIndex++;
   });
   card.append(sequence);
@@ -215,14 +215,14 @@ function renderRotationCard(
   footer.append(addAbility, addStep);
   card.append(footer);
 
-  if (picker?.rotationId === rotation.id) card.append(renderAbilityPicker(rotation, state, context));
+  if (picker?.rotationId === rotation.id) card.append(pickerView(rotation, state, context));
   return card;
 }
 
-function renderDeleteConfirmation(
+function deletePrompt(
   rotation: Rotation,
-  state: AppState,
-  context: RotationEditorContext
+  state: State,
+  context: EditorContext
 ): HTMLElement {
   const backdrop = document.createElement("div");
   backdrop.className = "settings-backdrop";
@@ -240,7 +240,7 @@ function renderDeleteConfirmation(
   title.id = "rotation-delete-title";
   title.textContent = "Delete rotation?";
 
-  const close = iconButton("×", "Cancel deletion", cancel);
+  const close = iconBtn("×", "Cancel deletion", cancel);
   close.className = "settings-modal-close";
   heading.append(title, close);
 
@@ -253,13 +253,13 @@ function renderDeleteConfirmation(
 
   const actions = document.createElement("div");
   actions.className = "rotation-delete-actions";
-  const cancelButton = smallTextButton("Cancel", cancel);
-  const confirmButton = smallTextButton("Delete", () => {
-    deleteConfirmationRotationId = null;
-    collapsedRotations.delete(rotation.id);
-    saveCollapsedRotationIds(collapsedRotations);
+  const cancelButton = textBtn("Cancel", cancel);
+  const confirmButton = textBtn("Delete", () => {
+    deleteId = null;
+    collapsed.delete(rotation.id);
+    saveCollapsedIds(collapsed);
     if (picker?.rotationId === rotation.id) picker = null;
-    state.deleteRotation(rotation.id);
+    state.remove(rotation.id);
   });
   confirmButton.classList.add("rotation-delete-confirm");
   actions.append(cancelButton, confirmButton);
@@ -279,35 +279,35 @@ function renderDeleteConfirmation(
   return backdrop;
 
   function cancel(): void {
-    deleteConfirmationRotationId = null;
+    deleteId = null;
     const editor = backdrop.closest(".rotation-editor") as HTMLElement | null;
     if (editor) renderEditor(editor, state, context);
   }
 }
 
-function renderStep(
+function stepView(
   rotation: Rotation,
   index: number,
   playableIndex: number,
   current: boolean,
-  state: AppState,
-  context: RotationEditorContext
+  state: State,
+  context: EditorContext
 ): HTMLElement {
   const step = rotation.steps[index];
-  const entry = rotationEntryById.get(step.abilityId);
-  const stepLabel = entry?.name ?? (step.abilityId || "Empty ability");
-  const wrapper = document.createElement("div");
-  wrapper.className = `sequence-step${current ? " is-current" : ""}`;
-  wrapper.dataset.rotationId = rotation.id;
-  if (step.abilityId) wrapper.dataset.playableIndex = String(playableIndex);
-  wrapper.draggable = true;
-  wrapper.title = `${index + 1}. ${stepLabel}`;
+  const entry = entryById.get(step.abilityId);
+  const label = entry?.name ?? (step.abilityId || "Empty ability");
+  const element = document.createElement("div");
+  element.className = `sequence-step${current ? " is-current" : ""}`;
+  element.dataset.rotationId = rotation.id;
+  if (step.abilityId) element.dataset.playableIndex = String(playableIndex);
+  element.draggable = true;
+  element.title = `${index + 1}. ${label}`;
 
   const choose = document.createElement("button");
   choose.type = "button";
   choose.className = "sequence-step-main";
   choose.setAttribute("aria-label", step.abilityId
-    ? `Edit step ${index + 1}: ${stepLabel}`
+    ? `Edit step ${index + 1}: ${label}`
     : `Choose ability for step ${index + 1}`);
   const icon = document.createElement("img");
   icon.src = entry?.icon ?? "./assets/empty.png";
@@ -318,68 +318,68 @@ function renderStep(
   choose.append(icon, number);
   choose.addEventListener("click", () => {
     picker = { rotationId: rotation.id, replaceIndex: index };
-    renderEditor(wrapper.closest(".rotation-editor") as HTMLElement, state, context);
+    renderEditor(element.closest(".rotation-editor") as HTMLElement, state, context);
   });
 
-  const remove = iconButton("×", `Remove ${stepLabel}`, () => state.removeStep(rotation.id, index));
+  const remove = iconBtn("×", `Remove ${label}`, () => state.removeStep(rotation.id, index));
   remove.classList.add("sequence-remove");
-  wrapper.append(choose, remove);
+  element.append(choose, remove);
 
-  wrapper.addEventListener("dragstart", (event) => {
+  element.addEventListener("dragstart", (event) => {
     event.dataTransfer?.setData("text/plain", `${rotation.id}:${index}`);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-    wrapper.classList.add("is-dragging");
+    element.classList.add("is-dragging");
   });
-  wrapper.addEventListener("dragend", () => wrapper.classList.remove("is-dragging"));
-  wrapper.addEventListener("dragover", (event) => {
+  element.addEventListener("dragend", () => element.classList.remove("is-dragging"));
+  element.addEventListener("dragover", (event) => {
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
   });
-  wrapper.addEventListener("drop", (event) => {
+  element.addEventListener("drop", (event) => {
     event.preventDefault();
-    const [sourceRotationId, sourceIndex] = (event.dataTransfer?.getData("text/plain") ?? "").split(":");
-    if (sourceRotationId === rotation.id) state.moveStep(rotation.id, Number(sourceIndex), index);
+    const [sourceId, sourceIndex] = (event.dataTransfer?.getData("text/plain") ?? "").split(":");
+    if (sourceId === rotation.id) state.moveStep(rotation.id, Number(sourceIndex), index);
   });
   choose.addEventListener("keydown", (event) => {
     if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
     event.preventDefault();
     state.moveStep(rotation.id, index, index + (event.key === "ArrowLeft" ? -1 : 1));
   });
-  return wrapper;
+  return element;
 }
 
-function renderAbilityPicker(rotation: Rotation, state: AppState, context: RotationEditorContext): HTMLElement {
+function pickerView(rotation: Rotation, state: State, context: EditorContext): HTMLElement {
   const panel = document.createElement("section");
   panel.className = "ability-picker";
   const header = document.createElement("div");
   header.className = "ability-picker-heading";
   const title = document.createElement("strong");
   title.textContent = `Edit Step ${(picker?.replaceIndex ?? 0) + 1}`;
-  const close = iconButton("×", "Close ability picker", () => {
+  const close = iconBtn("×", "Close ability picker", () => {
     picker = null;
     renderEditor(panel.closest(".rotation-editor") as HTMLElement, state, context);
   });
   header.append(title, close);
 
-  let selectedFilter: PickerSectionId = "combat";
+  let selectedFilter: PickerId = "combat";
   const filters = document.createElement("div");
   filters.className = "ability-picker-filters";
   filters.setAttribute("role", "group");
   filters.setAttribute("aria-label", "Ability type filter");
-  const filterButtons = new Map<PickerSectionId, HTMLButtonElement>();
+  const filterButtons = new Map<PickerId, HTMLButtonElement>();
 
   const search = document.createElement("input");
   search.type = "search";
-  search.placeholder = `Search ${pickerSectionDefinition(selectedFilter, rotation.category).label}`;
+  search.placeholder = `Search ${pickerDef(selectedFilter, rotation.category).label}`;
   search.setAttribute("aria-label", "Search abilities");
   const results = document.createElement("div");
   results.className = "ability-results";
 
-  const drawResults = (): void => {
+  const updateResults = (): void => {
     const query = search.value.trim().toLowerCase();
-    const matches = catalogEntriesForSection(selectedFilter, rotation.category)
+    const matches = entriesForSection(selectedFilter, rotation.category)
       .filter((entry) => !query || `${entry.name} ${entry.style ?? ""}`.toLowerCase().includes(query));
-    results.replaceChildren(...matches.map((entry) => abilityOption(entry, () => {
+    results.replaceChildren(...matches.map((entry) => abilityButton(entry, () => {
       const replaceIndex = picker?.rotationId === rotation.id ? picker.replaceIndex : null;
       picker = null;
       if (replaceIndex === null) state.addStep(rotation.id, entry.id);
@@ -388,24 +388,24 @@ function renderAbilityPicker(rotation: Rotation, state: AppState, context: Rotat
     if (!matches.length) {
       const empty = document.createElement("p");
       empty.className = "picker-empty";
-      empty.textContent = `No matching ${pickerSectionDefinition(selectedFilter, rotation.category).label}.`;
+      empty.textContent = `No matching ${pickerDef(selectedFilter, rotation.category).label}.`;
       results.append(empty);
     }
   };
 
-  const selectFilter = (filter: PickerSectionId): void => {
+  const selectFilter = (filter: PickerId): void => {
     selectedFilter = filter;
     filterButtons.forEach((button, id) => {
       const selected = id === filter;
       button.classList.toggle("is-selected", selected);
       button.setAttribute("aria-pressed", String(selected));
     });
-    search.placeholder = `Search ${pickerSectionDefinition(filter, rotation.category).label}`;
-    drawResults();
+    search.placeholder = `Search ${pickerDef(filter, rotation.category).label}`;
+    updateResults();
   };
 
-  pickerSectionsForCategory(rotation.category).forEach((filter) => {
-    const definition = pickerSectionDefinition(filter, rotation.category);
+  pickerSectionsFor(rotation.category).forEach((filter) => {
+    const definition = pickerDef(filter, rotation.category);
     const button = document.createElement("button");
     button.type = "button";
     button.className = `ability-picker-filter${filter === selectedFilter ? " is-selected" : ""}`;
@@ -421,14 +421,14 @@ function renderAbilityPicker(rotation: Rotation, state: AppState, context: Rotat
     filters.append(button);
   });
 
-  search.addEventListener("input", drawResults);
-  drawResults();
+  search.addEventListener("input", updateResults);
+  updateResults();
   panel.append(header, filters, search, results);
   window.setTimeout(() => search.focus(), 0);
   return panel;
 }
 
-function abilityOption(entry: RotationCatalogEntry, action: () => void): HTMLButtonElement {
+function abilityButton(entry: CatalogItem, action: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "ability-option";
@@ -445,17 +445,17 @@ function abilityOption(entry: RotationCatalogEntry, action: () => void): HTMLBut
 }
 
 function exportRotation(rotation: Rotation, showMessage: (message: string) => void): void {
-  const blob = new Blob([serializeRotation(rotation)], { type: "application/json" });
+  const blob = new Blob([serialize(rotation)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${safeFileName(rotation.name)}.rotation.json`;
+  link.download = `${safeName(rotation.name)}.rotation.json`;
   link.click();
   URL.revokeObjectURL(url);
   showMessage(`Exported “${rotation.name}”.`);
 }
 
-function importRotation(state: AppState, showMessage: (message: string) => void): void {
+function importRotation(state: State, showMessage: (message: string) => void): void {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".json,application/json";
@@ -463,12 +463,12 @@ function importRotation(state: AppState, showMessage: (message: string) => void)
     const file = input.files?.[0];
     if (!file) return;
     try {
-      const rotation = parseRotationTransfer(await file.text());
+      const rotation = parse(await file.text());
       const existing = state.rotations.some((candidate) => candidate.id === rotation.id);
       showMessage(existing
         ? `Updated “${rotation.name}” from its matching ID.`
         : `Imported “${rotation.name}”.`);
-      state.importRotation(rotation);
+      state.import(rotation);
     } catch (error) {
       const message = error instanceof Error ? error.message : "The rotation could not be imported.";
       showMessage(message);
@@ -477,11 +477,11 @@ function importRotation(state: AppState, showMessage: (message: string) => void)
   input.click();
 }
 
-function safeFileName(name: string): string {
+function safeName(name: string): string {
   return name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, "-") || "rotation";
 }
 
-function iconButton(text: string, label: string, action: () => void): HTMLButtonElement {
+function iconBtn(text: string, label: string, action: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "icon-button";
@@ -492,7 +492,7 @@ function iconButton(text: string, label: string, action: () => void): HTMLButton
   return button;
 }
 
-function smallTextButton(text: string, action: () => void): HTMLButtonElement {
+function textBtn(text: string, action: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "text-button";

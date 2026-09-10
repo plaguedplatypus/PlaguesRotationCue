@@ -10,7 +10,7 @@ export type IconMatch = {
   rejectionReason?: string;
 };
 
-export type KnownIconMeasurement = {
+export type IconSample = {
   abilityId: string;
   similarity: number;
   brightness: number;
@@ -23,116 +23,117 @@ export type ImageRect = {
   height: number;
 };
 
-type IconTemplate = {
+type Template = {
   abilityId: string;
   vector: Float32Array;
 };
 
-const SAMPLE_WIDTH = 24;
-const SAMPLE_HEIGHT = 18;
-const ALIGNMENT_RADIUS = 2;
-const ALIGNMENT_CANDIDATES = 12;
-const EMPTY_MIN_SCORE = 0.78;
-const EMPTY_ABILITY_TOLERANCE = 0.03;
+const sampleWidth = 24;
+const sampleHeight = 18;
+const alignmentRadius = 2;
+const alignCandidates = 12;
+const emptyMinScore = 0.78;
+const emptyTolerance = 0.03;
 
-export class IconMatcher {
-  private templatesPromise: Promise<IconTemplate[]> | null = null;
-  private emptyTemplatePromise: Promise<Float32Array | null> | null = null;
+export class Matcher {
+  private templateLoad: Promise<Template[]> | null = null;
+  private emptyLoad: Promise<Float32Array | null> | null = null;
 
-  prepare(): Promise<IconTemplate[]> {
-    this.templatesPromise ??= Promise.all(abilities.map(async (ability) => {
-      const image = await loadImageData(ability.icon);
+  prepare(): Promise<Template[]> {
+    this.templateLoad ??= Promise.all(abilities.map(async (ability) => {
+      const image = await loadImage(ability.icon);
       return image ? {
         abilityId: ability.id,
-        vector: sampleVector(image, { x: 0, y: 0, width: image.width, height: image.height })
+        vector: sample(image, { x: 0, y: 0, width: image.width, height: image.height })
       } : null;
-    })).then((templates) => templates.filter((template): template is IconTemplate => !!template));
-    return this.templatesPromise;
+    })).then((templates) => templates.filter((template): template is Template => !!template));
+    return this.templateLoad;
   }
 
   async match(image: ImageData, rect: ImageRect): Promise<IconMatch> {
     const [templates, emptyTemplate] = await Promise.all([
       this.prepare(),
-      this.prepareEmptyTemplate()
+      this.prepareEmpty()
     ]);
     if (!templates.length) {
-      return rejectedMatch("Ability icon templates could not be loaded");
+      return reject("Ability icon templates could not be loaded");
     }
 
-    const centerVector = sampleVector(image, rect);
-    let emptyScore = emptyTemplate ? dot(centerVector, emptyTemplate) : -1;
-    const candidateTemplates = templates
-      .map((template) => ({ template, score: dot(centerVector, template.vector) }))
+    const center = sample(image, rect);
+    let emptyScore = emptyTemplate ? dot(center, emptyTemplate) : -1;
+    const candidates = templates
+      .map((template) => ({ template, score: dot(center, template.vector) }))
       .sort((left, right) => right.score - left.score)
-      .slice(0, ALIGNMENT_CANDIDATES);
-    const bestByAbility = new Map(
-      candidateTemplates.map(({ template, score }) => [template.abilityId, score])
+      .slice(0, alignCandidates);
+    const scores = new Map(
+      candidates.map(({ template, score }) => [template.abilityId, score])
     );
 
-    for (let deltaY = -ALIGNMENT_RADIUS; deltaY <= ALIGNMENT_RADIUS; deltaY++) {
-      for (let deltaX = -ALIGNMENT_RADIUS; deltaX <= ALIGNMENT_RADIUS; deltaX++) {
+    for (let deltaY = -alignmentRadius; deltaY <= alignmentRadius; deltaY++) {
+      for (let deltaX = -alignmentRadius; deltaX <= alignmentRadius; deltaX++) {
         if (deltaX === 0 && deltaY === 0) continue;
-        const vector = sampleVector(image, {
+        const vector = sample(image, {
           ...rect,
           x: rect.x + deltaX,
           y: rect.y + deltaY
         });
         if (emptyTemplate) emptyScore = Math.max(emptyScore, dot(vector, emptyTemplate));
-        for (const { template } of candidateTemplates) {
+        for (const { template } of candidates) {
           const score = dot(vector, template.vector);
-          if (score > (bestByAbility.get(template.abilityId) ?? -1)) {
-            bestByAbility.set(template.abilityId, score);
+          if (score > (scores.get(template.abilityId) ?? -1)) {
+            scores.set(template.abilityId, score);
           }
         }
       }
     }
 
-    const ranked = [...bestByAbility.entries()]
+    const ranked = [...scores.entries()]
       .map(([abilityId, score]) => ({ abilityId, score }))
       .sort((left, right) => right.score - left.score);
     const best = ranked[0];
-    const runnerUp = ranked[1];
-    if (!best) return rejectedMatch("No icon candidates were produced");
+    const second = ranked[1];
+    if (!best) return reject("No icon candidates were produced");
 
-    const score = clampScore(best.score);
-    const runnerUpScore = clampScore(runnerUp?.score ?? -1);
-    const margin = Math.max(0, score - runnerUpScore);
-    const normalizedEmptyScore = clampScore(emptyScore);
+    const score = clamp01(best.score);
+    const secondScore = clamp01(second?.score ?? -1);
+    const margin = Math.max(0, score - secondScore);
+    const emptyMatch = clamp01(emptyScore);
     const empty = !!emptyTemplate
-      && normalizedEmptyScore >= EMPTY_MIN_SCORE
-      && normalizedEmptyScore >= score - EMPTY_ABILITY_TOLERANCE;
+      && emptyMatch >= emptyMinScore
+      && emptyMatch >= score - emptyTolerance;
     if (empty) {
       return {
         abilityId: "",
         score,
         margin,
         empty: true,
-        emptyScore: normalizedEmptyScore,
+        emptyScore: emptyMatch,
         accepted: false,
         rejectionReason: "Empty slot"
       };
     }
-    const acceptsCloseColorVariant = (
+    // These icons are identical in design, so I will accept the best color match and hope for the best.
+    const colorVariant = (
       best.abilityId === "animate_dead"
       || best.abilityId === "smoke_cloud"
     )
       && score >= 0.94
       && margin >= 0.035;
-    const acceptsDarkShadowBarrage = best.abilityId === "shadow_barrage"
+    const darkBarrage = best.abilityId === "shadow_barrage"
       && score >= 0.82
       && margin >= 0.045;
     const accepted = (score >= 0.68 && margin >= 0.12) ||
       (score >= 0.72 && margin >= 0.08) ||
       (score >= 0.84 && margin >= 0.06) ||
-      acceptsCloseColorVariant ||
-      acceptsDarkShadowBarrage;
+      colorVariant ||
+      darkBarrage;
 
     return {
       abilityId: best.abilityId,
       score,
       margin,
       empty: false,
-      emptyScore: normalizedEmptyScore,
+      emptyScore: emptyMatch,
       accepted,
       rejectionReason: accepted
         ? undefined
@@ -142,28 +143,28 @@ export class IconMatcher {
     };
   }
 
-  private prepareEmptyTemplate(): Promise<Float32Array | null> {
-    this.emptyTemplatePromise ??= loadImageData("./assets/empty.png")
+  private prepareEmpty(): Promise<Float32Array | null> {
+    this.emptyLoad ??= loadImage("./assets/empty.png")
       .then((image) => image
-        ? sampleVector(image, { x: 0, y: 0, width: image.width, height: image.height })
+        ? sample(image, { x: 0, y: 0, width: image.width, height: image.height })
         : null);
-    return this.emptyTemplatePromise;
+    return this.emptyLoad;
   }
 
-  async measureKnownAbilities(
+  async measureKnown(
     image: ImageData,
     rect: ImageRect,
     abilityIds: readonly string[]
-  ): Promise<KnownIconMeasurement[]> {
-    const requestedIds = new Set(abilityIds);
+  ): Promise<IconSample[]> {
+    const wanted = new Set(abilityIds);
     const templates = (await this.prepare())
-      .filter((candidate) => requestedIds.has(candidate.abilityId));
+      .filter((candidate) => wanted.has(candidate.abilityId));
     if (!templates.length) return [];
 
     const similarities = new Map(templates.map((template) => [template.abilityId, -1]));
-    for (let deltaY = -ALIGNMENT_RADIUS; deltaY <= ALIGNMENT_RADIUS; deltaY++) {
-      for (let deltaX = -ALIGNMENT_RADIUS; deltaX <= ALIGNMENT_RADIUS; deltaX++) {
-        const vector = sampleVector(image, {
+    for (let deltaY = -alignmentRadius; deltaY <= alignmentRadius; deltaY++) {
+      for (let deltaX = -alignmentRadius; deltaX <= alignmentRadius; deltaX++) {
+        const vector = sample(image, {
           ...rect,
           x: rect.x + deltaX,
           y: rect.y + deltaY
@@ -177,16 +178,17 @@ export class IconMatcher {
       }
     }
 
-    const brightness = sampleBrightness(image, rect);
+    const brightness = getBrightness(image, rect);
     return templates.map((template) => ({
       abilityId: template.abilityId,
-      similarity: clampScore(similarities.get(template.abilityId) ?? -1),
+      similarity: clamp01(similarities.get(template.abilityId) ?? -1),
       brightness
     }));
   }
 }
 
-function sampleVector(image: ImageData, rect: ImageRect): Float32Array {
+function sample(image: ImageData, rect: ImageRect): Float32Array {
+  // Trying to avoid the keybinds on the bottom of the icons and the cooldown text at the top of the icons...
   const scaleX = Math.max(0.6, rect.width / 31);
   const scaleY = Math.max(0.6, rect.height / 31);
 
@@ -195,31 +197,31 @@ function sampleVector(image: ImageData, rect: ImageRect): Float32Array {
   const right = rect.x + rect.width - Math.round(1 * scaleX);
   const bottom = rect.y + rect.height - Math.round(10 * scaleY);
 
-  const sourceWidth = Math.max(1, right - left);
-  const sourceHeight = Math.max(1, bottom - top);
-  const raw = new Float32Array(SAMPLE_WIDTH * SAMPLE_HEIGHT * 3);
-  let outputIndex = 0;
+  const srcWidth = Math.max(1, right - left);
+  const srcHeight = Math.max(1, bottom - top);
+  const raw = new Float32Array(sampleWidth * sampleHeight * 3);
+  let at = 0;
 
-  for (let y = 0; y < SAMPLE_HEIGHT; y++) {
-    for (let x = 0; x < SAMPLE_WIDTH; x++) {
-      const normalizedX = (x + 0.5) / SAMPLE_WIDTH;
-      const normalizedY = (y + 0.5) / SAMPLE_HEIGHT;
+  for (let y = 0; y < sampleHeight; y++) {
+    for (let x = 0; x < sampleWidth; x++) {
+      const nx = (x + 0.5) / sampleWidth;
+      const ny = (y + 0.5) / sampleHeight;
 
-      const pixelX = clamp(
-        Math.round(left + normalizedX * sourceWidth),
+      const px = clamp(
+        Math.round(left + nx * srcWidth),
         0,
         image.width - 1
       );
-      const pixelY = clamp(
-        Math.round(top + normalizedY * sourceHeight),
+      const py = clamp(
+        Math.round(top + ny * srcHeight),
         0,
         Math.min(image.height - 1, Math.max(0, bottom - 1))
       );
 
-      const pixelIndex = (pixelY * image.width + pixelX) * 4;
-      raw[outputIndex++] = image.data[pixelIndex] / 255;
-      raw[outputIndex++] = image.data[pixelIndex + 1] / 255;
-      raw[outputIndex++] = image.data[pixelIndex + 2] / 255;
+      const pixel = (py * image.width + px) * 4;
+      raw[at++] = image.data[pixel] / 255;
+      raw[at++] = image.data[pixel + 1] / 255;
+      raw[at++] = image.data[pixel + 2] / 255;
     }
   }
 
@@ -230,17 +232,17 @@ function normalize(raw: Float32Array): Float32Array {
   let sum = 0;
   for (const value of raw) sum += value;
   const mean = sum / Math.max(1, raw.length);
-  let magnitudeSquared = 0;
-  for (const value of raw) magnitudeSquared += (value - mean) ** 2;
-  const magnitude = Math.sqrt(magnitudeSquared) || 1;
-  const normalized = new Float32Array(raw.length);
+  let magnitudeSq = 0;
+  for (const value of raw) magnitudeSq += (value - mean) ** 2;
+  const magnitude = Math.sqrt(magnitudeSq) || 1;
+  const vector = new Float32Array(raw.length);
   for (let index = 0; index < raw.length; index++) {
-    normalized[index] = (raw[index] - mean) / magnitude;
+    vector[index] = (raw[index] - mean) / magnitude;
   }
-  return normalized;
+  return vector;
 }
 
-function sampleBrightness(image: ImageData, rect: ImageRect): number {
+function getBrightness(image: ImageData, rect: ImageRect): number {
   const left = clamp(Math.round(rect.x + rect.width * 0.16), 0, image.width - 1);
   const top = clamp(Math.round(rect.y + rect.height * 0.16), 0, image.height - 1);
   const right = clamp(Math.round(rect.x + rect.width * 0.84), left + 1, image.width);
@@ -265,7 +267,7 @@ function dot(left: Float32Array, right: Float32Array): number {
   return score;
 }
 
-function clampScore(value: number): number {
+function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
@@ -273,7 +275,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function rejectedMatch(rejectionReason: string): IconMatch {
+function reject(rejectionReason: string): IconMatch {
   return {
     abilityId: "",
     score: 0,
@@ -283,7 +285,7 @@ function rejectedMatch(rejectionReason: string): IconMatch {
   };
 }
 
-function loadImageData(src: string): Promise<ImageData | null> {
+function loadImage(src: string): Promise<ImageData | null> {
   return new Promise((resolve) => {
     const image = new Image();
     image.onload = () => {

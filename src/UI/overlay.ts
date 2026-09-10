@@ -1,48 +1,48 @@
 import { encodeImageString } from "alt1/base";
-import { rotationEntryById } from "../data/abilityData";
-import type { CueItem, ScreenPoint } from "../types";
-import { cueKeybindSequence, type VisualKeybinds } from "./keybind";
+import { entryById } from "../data/abilityData";
+import type { Cue, Point } from "../types";
+import { cueKeys, type Keybinds } from "./keybind";
 
-const GROUP_NAME = "rotation-cue-strip";
-const CUE_COUNT = 4;
-const OVERLAY_LIFETIME_MS = 20_000;
-const OVERLAY_REFRESH_MS = 10_000;
+const groupName = "rotation-cue-strip";
+const cueCount = 4;
+const overlayLifetimeMs = 20_000;
+const overlayRefreshMs = 10_000;
 
 export function isAlt1Available(): boolean {
   return typeof window.alt1 !== "undefined";
 }
 
-export class Alt1CueOverlay {
+export class CueOverlay {
   private imageCache = new Map<string, Promise<HTMLImageElement | null>>();
   private lastSignature = "";
   private lastDrawAt = 0;
-  private position: ScreenPoint | null = null;
+  private position: Point | null = null;
   private scale = 1;
   private borderThickness = 2;
   private borderColor = "#f2c94c";
   private opacity = 1;
   private showAbilityNames = true;
   private showNextLabel = true;
-  private visualKeybinds: VisualKeybinds = {};
+  private keybinds: Keybinds = {};
   private autoAdvance = true;
   private currentCooldown: { abilityId: string; seconds: number } | null = null;
-  private placementDrawInProgress = false;
+  private drawingPreview = false;
 
-  async draw(cues: CueItem[]): Promise<void> {
+  async draw(cues: Cue[]): Promise<void> {
     await this.drawAt(cues, this.position, false);
   }
 
-  async drawPlacementPreview(cues: CueItem[], position: ScreenPoint): Promise<void> {
-    if (this.placementDrawInProgress) return;
-    this.placementDrawInProgress = true;
+  async drawPreview(cues: Cue[], position: Point): Promise<void> {
+    if (this.drawingPreview) return;
+    this.drawingPreview = true;
     try {
       await this.drawAt(cues, position, true);
     } finally {
-      this.placementDrawInProgress = false;
+      this.drawingPreview = false;
     }
   }
 
-  setPosition(position: ScreenPoint | null): void {
+  setPosition(position: Point | null): void {
     if (this.position?.x === position?.x && this.position?.y === position?.y) return;
     this.position = position ? { ...position } : null;
     this.lastSignature = "";
@@ -57,7 +57,7 @@ export class Alt1CueOverlay {
     this.lastDrawAt = 0;
   }
 
-  setBorderThickness(thickness: number): void {
+  setBorder(thickness: number): void {
     const nextThickness = Math.max(0, Math.min(3, Math.round(thickness)));
     if (this.borderThickness === nextThickness) return;
     this.borderThickness = nextThickness;
@@ -81,24 +81,24 @@ export class Alt1CueOverlay {
     this.lastDrawAt = 0;
   }
 
-  setShowAbilityNames(show: boolean): void {
+  setNames(show: boolean): void {
     if (this.showAbilityNames === show) return;
     this.showAbilityNames = show;
     this.lastSignature = "";
     this.lastDrawAt = 0;
   }
 
-  setShowNextLabel(show: boolean): void {
+  setKeybindVisible(show: boolean): void {
     if (this.showNextLabel === show) return;
     this.showNextLabel = show;
     this.lastSignature = "";
     this.lastDrawAt = 0;
   }
 
-  setVisualKeybinds(keybinds: VisualKeybinds): void {
+  setKeybinds(keybinds: Keybinds): void {
     const next = { ...keybinds };
-    if (JSON.stringify(this.visualKeybinds) === JSON.stringify(next)) return;
-    this.visualKeybinds = next;
+    if (JSON.stringify(this.keybinds) === JSON.stringify(next)) return;
+    this.keybinds = next;
     this.lastSignature = "";
     this.lastDrawAt = 0;
   }
@@ -110,7 +110,7 @@ export class Alt1CueOverlay {
     this.lastDrawAt = 0;
   }
 
-  setCurrentCooldown(abilityId: string | null, seconds?: number): boolean {
+  setCooldown(abilityId: string | null, seconds?: number): boolean {
     const hasActiveCooldown = typeof seconds === "number"
       && Number.isFinite(seconds)
       && seconds > 0;
@@ -125,7 +125,7 @@ export class Alt1CueOverlay {
     return true;
   }
 
-  private async drawAt(cues: CueItem[], position: ScreenPoint | null, placementPreview: boolean): Promise<void> {
+  private async drawAt(cues: Cue[], position: Point | null, placementPreview: boolean): Promise<void> {
     if (!isAlt1Available()) return;
     if (!cues.length && !placementPreview) {
       this.clear();
@@ -134,14 +134,14 @@ export class Alt1CueOverlay {
 
     const positionSignature = position ? `${position.x},${position.y}` : "default";
     const visualSequence = cues.map((cue) => cue.offset === 0
-      ? cueKeybindSequence(cue.step.abilityId, this.visualKeybinds, this.autoAdvance).join("+")
+      ? cueKeys(cue.step.abilityId, this.keybinds, this.autoAdvance).join("+")
       : "").join("|");
     const cooldownSignature = this.currentCooldown
       ? `${this.currentCooldown.abilityId}:${this.currentCooldown.seconds}`
       : "ready";
     const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showAbilityNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}`;
     if (!placementPreview && signature === this.lastSignature
-      && Date.now() - this.lastDrawAt < OVERLAY_REFRESH_MS) return;
+      && Date.now() - this.lastDrawAt < overlayRefreshMs) return;
 
     const canvas = document.createElement("canvas");
     const tileWidth = 72;
@@ -150,12 +150,12 @@ export class Alt1CueOverlay {
     const frameInset = 3;
     const backgroundBorder = 1;
     const currentCue = cues.find((cue) => cue.offset === 0);
-    const currentKeybinds = currentCue && this.showNextLabel
-      ? cueKeybindSequence(currentCue.step.abilityId, this.visualKeybinds, this.autoAdvance)
+    const currentKeys = currentCue && this.showNextLabel
+      ? cueKeys(currentCue.step.abilityId, this.keybinds, this.autoAdvance)
       : [];
     const measuringContext = document.createElement("canvas").getContext("2d");
     const badgeWidth = measuringContext
-      ? measureKeybindSequence(measuringContext, currentKeybinds)
+      ? measureKeys(measuringContext, currentKeys)
       : 0;
     const visualGutter = badgeWidth
       ? Math.max(0, Math.ceil((badgeWidth - tileWidth) / 2) + this.borderThickness)
@@ -164,7 +164,7 @@ export class Alt1CueOverlay {
     const tileHeight = frameY + frameSize + (this.showAbilityNames ? 10 : 0);
     const cueStripWidth = cues.length
       ? cues.length * tileWidth + (cues.length - 1) * gap
-      : tileWidth * CUE_COUNT + (CUE_COUNT - 1) * gap;
+      : tileWidth * cueCount + (cueCount - 1) * gap;
     const logicalWidth = cueStripWidth + visualGutter * 2;
     const logicalHeight = tileHeight;
     canvas.width = Math.max(1, Math.round(logicalWidth * this.scale));
@@ -175,12 +175,12 @@ export class Alt1CueOverlay {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.scale(this.scale, this.scale);
     const loadedIcons = await Promise.all(cues.map((cue) => {
-      const icon = rotationEntryById.get(cue.step.abilityId)?.icon;
+      const icon = entryById.get(cue.step.abilityId)?.icon;
       return icon ? this.loadImage(icon) : Promise.resolve(null);
     }));
 
     cues.forEach((cue, index) => {
-      const ability = rotationEntryById.get(cue.step.abilityId);
+      const ability = entryById.get(cue.step.abilityId);
       const x = visualGutter + index * (tileWidth + gap);
       const current = cue.offset === 0;
       const cueFrameSize = Math.round(frameSize * cueScale(cue.offset));
@@ -221,18 +221,18 @@ export class Alt1CueOverlay {
       context.textAlign = "center";
       context.textBaseline = "alphabetic";
       if (current && this.showNextLabel) {
-        drawKeybindSequence(
+        drawKeys(
           context,
           x + tileWidth / 2,
           6,
-          cueKeybindSequence(cue.step.abilityId, this.visualKeybinds, this.autoAdvance),
+          cueKeys(cue.step.abilityId, this.keybinds, this.autoAdvance),
           this.borderColor,
           this.borderThickness
         );
       }
 
       if (index > 0) {
-        drawCueArrow(context, x - gap / 2, cueFrameY + cueFrameSize / 2);
+        drawArrow(context, x - gap / 2, cueFrameY + cueFrameSize / 2);
       }
 
       if (this.showAbilityNames) {
@@ -265,19 +265,19 @@ export class Alt1CueOverlay {
 
     try {
       const alt1 = window.alt1;
-      alt1.overLaySetGroup(GROUP_NAME);
+      alt1.overLaySetGroup(groupName);
       const canContinue = typeof alt1.overLayFreezeGroup === "function"
         && typeof alt1.overLayContinueGroup === "function";
-      if (canContinue) alt1.overLayFreezeGroup(GROUP_NAME);
-      alt1.overLayClearGroup(GROUP_NAME);
+      if (canContinue) alt1.overLayFreezeGroup(groupName);
+      alt1.overLayClearGroup(groupName);
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const iconOpacityRegions = cues.map((cue, index) => {
+      const iconRegions = cues.map((cue, index) => {
         const cueFrameSize = Math.round(frameSize * cueScale(cue.offset));
         const cueIconSize = cueFrameSize - frameInset * 2;
         const frameX = visualGutter + index * (tileWidth + gap)
           + Math.round((tileWidth - cueFrameSize) / 2);
         const cueFrameY = frameY + frameSize - cueFrameSize;
-        return scaledRegion(
+        return scaleRegion(
           frameX + frameInset,
           cueFrameY + frameInset,
           cueIconSize,
@@ -285,7 +285,7 @@ export class Alt1CueOverlay {
           this.scale
         );
       });
-      applyOverlayOpacity(imageData, this.opacity, iconOpacityRegions);
+      applyOpacity(imageData, this.opacity, iconRegions);
       context.putImageData(imageData, 0, 0);
       const currentIndex = cues.findIndex((cue) => cue.offset === 0);
       const currentAbilityId = currentIndex >= 0 ? cues[currentIndex].step.abilityId : null;
@@ -295,7 +295,7 @@ export class Alt1CueOverlay {
         const frameX = visualGutter + currentIndex * (tileWidth + gap)
           + Math.round((tileWidth - currentFrameSize) / 2);
         const currentFrameY = frameY + frameSize - currentFrameSize;
-        drawCooldownNumber(
+        drawCooldown(
           context,
           frameX + frameInset + currentIconSize / 2,
           currentFrameY + frameInset + currentIconSize / 2,
@@ -307,14 +307,14 @@ export class Alt1CueOverlay {
       const rsHeight = Number(alt1.rsHeight);
       const defaultX = Math.max(8, Math.round((rsWidth - canvas.width) / 2));
       const x = position
-        ? clampCoordinate(Math.round(position.x - canvas.width / 2), rsWidth - canvas.width)
+        ? clampCoord(Math.round(position.x - canvas.width / 2), rsWidth - canvas.width)
         : defaultX;
       const y = position
-        ? clampCoordinate(Math.round(position.y - canvas.height / 2), rsHeight - canvas.height)
+        ? clampCoord(Math.round(position.y - canvas.height / 2), rsHeight - canvas.height)
         : 72;
-      alt1.overLayImage(x, y, encoded, canvas.width, placementPreview ? 700 : OVERLAY_LIFETIME_MS);
-      if (canContinue) alt1.overLayContinueGroup(GROUP_NAME);
-      else alt1.overLayRefreshGroup(GROUP_NAME);
+      alt1.overLayImage(x, y, encoded, canvas.width, placementPreview ? 700 : overlayLifetimeMs);
+      if (canContinue) alt1.overLayContinueGroup(groupName);
+      else alt1.overLayRefreshGroup(groupName);
       if (!placementPreview) {
         this.lastSignature = signature;
         this.lastDrawAt = Date.now();
@@ -327,9 +327,9 @@ export class Alt1CueOverlay {
   clear(): void {
     if (!isAlt1Available()) return;
     try {
-      window.alt1.overLaySetGroup(GROUP_NAME);
-      window.alt1.overLayClearGroup(GROUP_NAME);
-      window.alt1.overLayRefreshGroup(GROUP_NAME);
+      window.alt1.overLaySetGroup(groupName);
+      window.alt1.overLayClearGroup(groupName);
+      window.alt1.overLayRefreshGroup(groupName);
       this.lastSignature = "";
       this.lastDrawAt = 0;
     } catch {
@@ -359,7 +359,7 @@ export class Alt1CueOverlay {
   }
 }
 
-function clampCoordinate(value: number, maximum: number): number {
+function clampCoord(value: number, maximum: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(maximum)) return 0;
   return Math.max(0, Math.min(value, Math.max(0, maximum)));
 }
@@ -369,7 +369,7 @@ function cueScale(offset: number): number {
   return 0.85;
 }
 
-function drawCueArrow(context: CanvasRenderingContext2D, centerX: number, centerY: number): void {
+function drawArrow(context: CanvasRenderingContext2D, centerX: number, centerY: number): void {
   context.save();
   context.beginPath();
   context.moveTo(centerX - 2.5, centerY - 4);
@@ -386,14 +386,14 @@ function drawCueArrow(context: CanvasRenderingContext2D, centerX: number, center
   context.restore();
 }
 
-function measureKeybindSequence(context: CanvasRenderingContext2D, keybinds: string[]): number {
+function measureKeys(context: CanvasRenderingContext2D, keybinds: string[]): number {
   if (!keybinds.length) return 0;
   context.font = "bold 10px Arial";
   const keyWidths = keybinds.map((keybind) => Math.max(14, Math.ceil(context.measureText(keybind).width) + 6));
   return keyWidths.reduce((total, width) => total + width, 0) + Math.max(0, keybinds.length - 1) * 9;
 }
 
-function drawKeybindSequence(
+function drawKeys(
   context: CanvasRenderingContext2D,
   centerX: number,
   y: number,
@@ -437,7 +437,7 @@ function drawKeybindSequence(
   });
 }
 
-function drawCooldownNumber(
+function drawCooldown(
   context: CanvasRenderingContext2D,
   centerX: number,
   centerY: number,
@@ -456,7 +456,7 @@ function drawCooldownNumber(
   context.restore();
 }
 
-const OPACITY_BAYER_8X8 = [
+const opacityPattern = [
    0, 32,  8, 40,  2, 34, 10, 42,
   48, 16, 56, 24, 50, 18, 58, 26,
   12, 44,  4, 36, 14, 46,  6, 38,
@@ -467,9 +467,9 @@ const OPACITY_BAYER_8X8 = [
   63, 31, 55, 23, 61, 29, 53, 21
 ];
 
-type PixelRegion = { left: number; top: number; right: number; bottom: number };
+type Region = { left: number; top: number; right: number; bottom: number };
 
-function scaledRegion(x: number, y: number, width: number, height: number, scale: number): PixelRegion {
+function scaleRegion(x: number, y: number, width: number, height: number, scale: number): Region {
   return {
     left: Math.floor(x * scale),
     top: Math.floor(y * scale),
@@ -478,7 +478,7 @@ function scaledRegion(x: number, y: number, width: number, height: number, scale
   };
 }
 
-function applyOverlayOpacity(image: ImageData, opacity: number, regions: PixelRegion[]): void {
+function applyOpacity(image: ImageData, opacity: number, regions: Region[]): void {
   if (opacity >= 1) return;
   const visibleLevels = Math.max(0, Math.min(64, Math.round(opacity * 64)));
   for (const region of regions) {
@@ -490,7 +490,7 @@ function applyOverlayOpacity(image: ImageData, opacity: number, regions: PixelRe
       for (let x = left; x < right; x += 1) {
         const alphaIndex = (y * image.width + x) * 4 + 3;
         if (image.data[alphaIndex] === 0) continue;
-        if (OPACITY_BAYER_8X8[(y % 8) * 8 + (x % 8)] >= visibleLevels) {
+        if (opacityPattern[(y % 8) * 8 + (x % 8)] >= visibleLevels) {
           image.data[alphaIndex] = 0;
         }
       }

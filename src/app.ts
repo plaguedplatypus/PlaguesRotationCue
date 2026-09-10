@@ -1,8 +1,8 @@
 import "./styles.css";
 import "./settings.css";
-import { AppState } from "./state";
+import { State } from "./state";
 import { mountApp } from "./ui/main";
-import { maybeShowUpdateToast } from "./updates/updateToast";
+import { maybeShowToast } from "./updates/updateToast";
 
 if (window.alt1) {
   try {
@@ -15,5 +15,5 @@ if (window.alt1) {
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) throw new Error("Rotation Cue app root was not found.");
 
-mountApp(root, new AppState());
-maybeShowUpdateToast();
+mountApp(root, new State());
+maybeShowToast();

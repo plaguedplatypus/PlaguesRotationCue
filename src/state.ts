@@ -1,23 +1,23 @@
 import {
-  loadActiveRotationId,
+  loadActiveId,
   loadRotations,
-  loadSelectedCategory,
-  saveActiveRotationId,
+  loadCategory,
+  saveActiveId,
   saveRotations,
-  saveSelectedCategory
+  saveCategory
 } from "./rotation/storage";
-import type { Rotation, RotationCategory } from "./types";
+import type { Rotation, Category } from "./types";
 
 type Listener = () => void;
 
-export class AppState {
+export class State {
   private listeners = new Set<Listener>();
   rotations: Rotation[] = loadRotations();
-  activeRotationId = loadActiveRotationId(this.rotations);
-  selectedCategory: RotationCategory = loadSelectedCategory();
+  activeId = loadActiveId(this.rotations);
+  category: Category = loadCategory();
 
-  get activeRotation(): Rotation | null {
-    return this.rotations.find((rotation) => rotation.id === this.activeRotationId) ?? null;
+  get active(): Rotation | null {
+    return this.rotations.find((rotation) => rotation.id === this.activeId) ?? null;
   }
 
   subscribe(listener: Listener): () => void {
@@ -25,20 +25,20 @@ export class AppState {
     return () => this.listeners.delete(listener);
   }
 
-  toggleRotation(rotationId: string): void {
+  toggle(rotationId: string): void {
     if (!this.rotations.some((rotation) => rotation.id === rotationId)) return;
-    this.activeRotationId = this.activeRotationId === rotationId ? "" : rotationId;
-    saveActiveRotationId(this.activeRotationId);
+    this.activeId = this.activeId === rotationId ? "" : rotationId;
+    saveActiveId(this.activeId);
     this.emit();
   }
 
-  selectCategory(category: RotationCategory): void {
-    this.selectedCategory = category;
-    saveSelectedCategory(category);
+  selectCategory(category: Category): void {
+    this.category = category;
+    saveCategory(category);
     this.emit();
   }
 
-  createRotation(name = "New rotation", category = this.selectedCategory): void {
+  create(name = "New rotation", category = this.category): void {
     const id = typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `rotation-${Date.now()}`;
@@ -46,35 +46,35 @@ export class AppState {
     this.persist();
   }
 
-  renameRotation(rotationId: string, name: string): void {
+  rename(rotationId: string, name: string): void {
     const nextName = name.trim();
     if (!nextName) return;
-    this.updateRotation(rotationId, (rotation) => ({ ...rotation, name: nextName }));
+    this.update(rotationId, (rotation) => ({ ...rotation, name: nextName }));
   }
 
-  deleteRotation(rotationId: string): void {
+  remove(rotationId: string): void {
     if (!this.rotations.some((rotation) => rotation.id === rotationId)) return;
     this.rotations = this.rotations.filter((rotation) => rotation.id !== rotationId);
-    if (this.activeRotationId === rotationId) this.activeRotationId = "";
+    if (this.activeId === rotationId) this.activeId = "";
     this.persist();
   }
 
   addStep(rotationId: string, abilityId: string): void {
-    this.updateRotation(rotationId, (rotation) => ({
+    this.update(rotationId, (rotation) => ({
       ...rotation,
       steps: [...rotation.steps, { abilityId }]
     }));
   }
 
   replaceStep(rotationId: string, index: number, abilityId: string): void {
-    this.updateRotation(rotationId, (rotation) => ({
+    this.update(rotationId, (rotation) => ({
       ...rotation,
       steps: rotation.steps.map((step, stepIndex) => stepIndex === index ? { abilityId } : step)
     }));
   }
 
   removeStep(rotationId: string, index: number): void {
-    this.updateRotation(rotationId, (rotation) => ({
+    this.update(rotationId, (rotation) => ({
       ...rotation,
       steps: rotation.steps.filter((_, stepIndex) => stepIndex !== index)
     }));
@@ -89,13 +89,13 @@ export class AppState {
     const [moved] = steps.splice(fromIndex, 1);
     if (!moved) return;
     steps.splice(destination, 0, moved);
-    this.updateRotation(rotationId, (current) => ({ ...current, steps }));
+    this.update(rotationId, (current) => ({ ...current, steps }));
   }
 
   moveRotation(rotationId: string, direction: -1 | 1): void {
-    const categoryRotations = this.rotations.filter((rotation) => rotation.category === this.selectedCategory);
-    const position = categoryRotations.findIndex((rotation) => rotation.id === rotationId);
-    const neighbor = categoryRotations[position + direction];
+    const group = this.rotations.filter((rotation) => rotation.category === this.category);
+    const position = group.findIndex((rotation) => rotation.id === rotationId);
+    const neighbor = group[position + direction];
     if (position < 0 || !neighbor) return;
     const from = this.rotations.findIndex((rotation) => rotation.id === rotationId);
     const to = this.rotations.findIndex((rotation) => rotation.id === neighbor.id);
@@ -105,19 +105,19 @@ export class AppState {
     this.persist();
   }
 
-  importRotation(rotation: Rotation): void {
+  import(rotation: Rotation): void {
     const existingIndex = this.rotations.findIndex((candidate) => candidate.id === rotation.id);
     if (existingIndex >= 0) {
       this.rotations = this.rotations.map((candidate) => candidate.id === rotation.id ? rotation : candidate);
     } else {
       this.rotations = [...this.rotations, rotation];
     }
-    this.selectedCategory = rotation.category;
+    this.category = rotation.category;
     this.persist();
-    saveSelectedCategory(rotation.category);
+    saveCategory(rotation.category);
   }
 
-  private updateRotation(rotationId: string, update: (rotation: Rotation) => Rotation): void {
+  private update(rotationId: string, update: (rotation: Rotation) => Rotation): void {
     if (!this.rotations.some((rotation) => rotation.id === rotationId)) return;
     this.rotations = this.rotations.map((rotation) =>
       rotation.id === rotationId ? update(rotation) : rotation
@@ -127,7 +127,7 @@ export class AppState {
 
   private persist(): void {
     saveRotations(this.rotations);
-    saveActiveRotationId(this.activeRotationId);
+    saveActiveId(this.activeId);
     this.emit();
   }
 

@@ -1,58 +1,60 @@
 import * as OCR from "alt1/ocr";
-import modernCooldownFont from "../assets/fonts/modern_cooldown_digits.json";
-import modernFallbackFont from "alt1/fonts/aa_8px_mono";
+import cooldownDigits from "../assets/fonts/cooldown_digits.json";
+import fallbackDigits from "alt1/fonts/aa_8px_mono";
 
-export interface CooldownSlotRect {
+export interface SlotRect {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export interface CooldownOcrResult {
+export interface OcrResult {
   rawText: string;
   seconds?: number;
   reliable?: boolean;
 }
 
-export interface CooldownOcrOptions {
-  maximumSeconds?: number;
+export interface OcrOptions {
+  max?: number;
 }
 
-type CooldownOcrSource =
-  | "modern-digits"
-  | "modern-line"
-  | "modern-backwards";
+type OcrSource =
+  | "digits"
+  | "line"
+  | "backwards";
 
-type CooldownNormalization = {
+type ParsedText = {
   text: string;
   valid: boolean;
   hasRealDigit: boolean;
-  substitutionCount: number;
-  weakSubstitutionCount: number;
-  specialSubstitutionCount: number;
+  substitutions: number;
+  weakSubs: number;
+  specialSubs: number;
 };
 
-type CooldownCandidate = {
+type Candidate = {
   rawText: string;
   seconds: number;
   reliable: boolean;
   score: number;
 };
 
-const MODERN_COOLDOWN_COLORS: OCR.ColortTriplet[] = [
+// Action-bar cooldown text is bright white and nearby shades. The alt1 reader used a color from the old interface style.
+const cooldownColors: OCR.ColortTriplet[] = [
   [255, 255, 255],
   [248, 248, 248],
   [235, 235, 235]
 ];
 
-const BASELINE_OFFSETS = [9, 10, 8, 11, 12];
-const RIGHT_EDGE_DELTAS = [0, -1, -2, -3, -4, -5, -6, -7, -8, -9];
-const MAX_COOLDOWN_SECONDS = 600;
-const MODERN_FONT = modernCooldownFont as unknown as OCR.FontDefinition;
-const MODERN_FALLBACK_FONT = modernFallbackFont as unknown as OCR.FontDefinition;
+// Interface scaling can move the baseline and right edge by a few pixels.
+const baselineOffsets = [9, 10, 8, 11, 12];
+const probeOffsets = [0, -1, -2, -3, -4, -5, -6, -7, -8, -9];
+const maxSeconds = 600;
+const cooldownFont = cooldownDigits as unknown as OCR.FontDefinition;
+const fallbackFont = fallbackDigits as unknown as OCR.FontDefinition;
 
-const STRONG_LOOKALIKES: Record<string, string> = {
+const strongLookalikes: Record<string, string> = {
   o: "0", O: "0", Q: "0",
   l: "1", L: "1", "|": "1",
   z: "2", Z: "2",
@@ -62,7 +64,7 @@ const STRONG_LOOKALIKES: Record<string, string> = {
   g: "9", q: "9"
 };
 
-const WEAK_LOOKALIKES: Record<string, string> = {
+const weakLookalikes: Record<string, string> = {
   D: "0",
   e: "3", E: "3",
   a: "4", A: "4",
@@ -72,80 +74,81 @@ const WEAK_LOOKALIKES: Record<string, string> = {
 
 export function readCooldown(
   capture: ImageData,
-  rect: CooldownSlotRect,
-  options: CooldownOcrOptions = {}
-): CooldownOcrResult {
-  const candidates: CooldownCandidate[] = [];
-  let bestRejectedRawText = "";
+  rect: SlotRect,
+  options: OcrOptions = {}
+): OcrResult {
+  const candidates: Candidate[] = [];
+  let rejected = "";
 
   const consider = (
     rawText: string,
-    source: CooldownOcrSource,
+    source: OcrSource,
     preference: number
   ): void => {
     const raw = String(rawText || "").trim();
-    if (raw.length > bestRejectedRawText.length) bestRejectedRawText = raw;
+    if (raw.length > rejected.length) rejected = raw;
 
-    const normalized = normalizeCandidate(raw);
-    const seconds = normalized.valid ? parseCooldownText(normalized.text) : undefined;
-    const maximumSeconds = options.maximumSeconds !== undefined
-      ? Math.ceil(options.maximumSeconds)
-      : MAX_COOLDOWN_SECONDS;
-    if (seconds !== undefined && seconds <= maximumSeconds) {
+    const normalized = normalize(raw);
+    const seconds = normalized.valid ? parseText(normalized.text) : undefined;
+    const limit = options.max !== undefined
+      ? Math.ceil(options.max)
+      : maxSeconds;
+    if (seconds !== undefined && seconds <= limit) {
       candidates.push({
         rawText: raw,
         seconds,
-        reliable: source === "modern-digits"
-          || (normalized.hasRealDigit && normalized.substitutionCount === 0),
-        score: scoreCandidate(normalized, preference)
+        reliable: source === "digits"
+          || (normalized.hasRealDigit && normalized.substitutions === 0),
+        score: score(normalized, preference)
       });
     }
   };
 
-  const modernRightEdge = rect.x + rect.width + 1;
-  for (const baselineOffset of BASELINE_OFFSETS) {
-    for (const rightDelta of RIGHT_EDGE_DELTAS) {
+  const rightEdge = rect.x + rect.width + 1;
+  for (const baseline of baselineOffsets) {
+    for (const shift of probeOffsets) {
       consider(
-        readLineSafe(
+        readLine(
           capture,
-          MODERN_FONT,
-          MODERN_COOLDOWN_COLORS,
-          modernRightEdge + rightDelta,
-          rect.y + baselineOffset
+          cooldownFont,
+          cooldownColors,
+          rightEdge + shift,
+          rect.y + baseline
         ),
-        "modern-digits",
+        "digits",
         45
       );
       consider(
-        readLineSafe(
+        readLine(
           capture,
-          MODERN_FALLBACK_FONT,
-          MODERN_COOLDOWN_COLORS,
-          modernRightEdge + rightDelta,
-          rect.y + baselineOffset
+          fallbackFont,
+          cooldownColors,
+          rightEdge + shift,
+          rect.y + baseline
         ),
-        "modern-line",
+        "line",
         30
       );
     }
   }
 
+  // Scan the whole top strip backwards when the right-edge probes miss.
   const fieldX = Math.max(0, rect.x - 1);
   const fieldY = Math.max(0, rect.y);
   const fieldWidth = Math.max(0, Math.min(capture.width - fieldX, rect.width + 3));
   const fieldHeight = Math.max(0, Math.min(capture.height - fieldY, 14));
   if (fieldWidth > 0 && fieldHeight > 0) {
     consider(
-      readSmallCapsSafe(
+      readBackwards(
         capture,
-        MODERN_FALLBACK_FONT,
-        MODERN_COOLDOWN_COLORS,
+        fallbackFont,
+        cooldownColors,
         fieldX,
         fieldY,
         fieldWidth,
         fieldHeight
       ),
-      "modern-backwards",
+      "backwards",
       25
     );
   }
@@ -154,10 +157,10 @@ export function readCooldown(
   const best = candidates[0];
   return best
     ? { rawText: best.rawText, seconds: best.seconds, reliable: best.reliable }
-    : { rawText: bestRejectedRawText };
+    : { rawText: rejected };
 }
 
-export function parseCooldownText(text: string): number | undefined {
+export function parseText(text: string): number | undefined {
   const clock = text.match(/^(\d{1,2}):(\d{2})$/);
   let seconds: number;
   if (clock) {
@@ -175,26 +178,27 @@ export function parseCooldownText(text: string): number | undefined {
     }
   }
 
-  return Number.isFinite(seconds) && seconds > 0 && seconds <= MAX_COOLDOWN_SECONDS
+  return Number.isFinite(seconds) && seconds > 0 && seconds <= maxSeconds
     ? seconds
     : undefined;
 }
 
-function normalizeCandidate(rawText: string): CooldownNormalization {
+function normalize(rawText: string): ParsedText {
   const raw = String(rawText || "");
   let text = "";
   let hasRealDigit = false;
-  let substitutionCount = 0;
-  let weakSubstitutionCount = 0;
-  let specialSubstitutionCount = 0;
+  let substitutions = 0;
+  let weakSubs = 0;
+  let specialSubs = 0;
 
   for (let index = 0; index < raw.length; index++) {
     const char = raw[index];
 
     if (char === "." && raw[index + 1] === ".") {
+      // The cooldown font can make 2 read as two isolated dots.
       text += "2";
-      substitutionCount++;
-      specialSubstitutionCount++;
+      substitutions++;
+      specialSubs++;
       index++;
       continue;
     }
@@ -216,68 +220,68 @@ function normalizeCandidate(rawText: string): CooldownNormalization {
 
     if (char === "i" || char === "I") {
       text += "4";
-      substitutionCount++;
-      specialSubstitutionCount++;
+      substitutions++;
+      specialSubs++;
       continue;
     }
 
     if (char === "!") {
-      if (!/\d/.test(raw)) return invalidNormalization(text);
+      if (!/\d/.test(raw)) return invalid(text);
       text += "1";
-      substitutionCount++;
-      specialSubstitutionCount++;
+      substitutions++;
+      specialSubs++;
       continue;
     }
 
-    if (Object.prototype.hasOwnProperty.call(STRONG_LOOKALIKES, char)) {
-      text += STRONG_LOOKALIKES[char];
-      substitutionCount++;
+    if (Object.prototype.hasOwnProperty.call(strongLookalikes, char)) {
+      text += strongLookalikes[char];
+      substitutions++;
       continue;
     }
-    if (Object.prototype.hasOwnProperty.call(WEAK_LOOKALIKES, char)) {
-      text += WEAK_LOOKALIKES[char];
-      substitutionCount++;
-      weakSubstitutionCount++;
+    if (Object.prototype.hasOwnProperty.call(weakLookalikes, char)) {
+      text += weakLookalikes[char];
+      substitutions++;
+      weakSubs++;
       continue;
     }
 
-    return invalidNormalization();
+    return invalid();
   }
 
   const validShape = /^\d{1,3}$/.test(text)
     || /^\d{1,2}:\d{2}$/.test(text)
     || /^\d{1,2}m$/.test(text);
-  if (!validShape) return invalidNormalization(text);
+  if (!validShape) return invalid(text);
 
-  if (!hasRealDigit && weakSubstitutionCount > 0) return invalidNormalization(text);
+  if (!hasRealDigit && weakSubs > 0) return invalid(text);
 
-  if (!hasRealDigit && substitutionCount > 0 && text.replace(/[:m]/g, "").length > 3) {
-    return invalidNormalization(text);
+  if (!hasRealDigit && substitutions > 0 && text.replace(/[:m]/g, "").length > 3) {
+    return invalid(text);
   }
 
   return {
     text,
     valid: true,
     hasRealDigit,
-    substitutionCount,
-    weakSubstitutionCount,
-    specialSubstitutionCount
+    substitutions,
+    weakSubs,
+    specialSubs
   };
 }
 
-function invalidNormalization(text = ""): CooldownNormalization {
+function invalid(text = ""): ParsedText {
   return {
     text,
     valid: false,
     hasRealDigit: false,
-    substitutionCount: 0,
-    weakSubstitutionCount: 0,
-    specialSubstitutionCount: 0
+    substitutions: 0,
+    weakSubs: 0,
+    specialSubs: 0
   };
 }
 
-function scoreCandidate(
-  normalized: CooldownNormalization,
+function score(
+  normalized: ParsedText,
   preference: number
 ): number {
   const timerGlyphs = normalized.text.replace(/[:m]/g, "").length;
@@ -285,13 +289,13 @@ function scoreCandidate(
   if (normalized.hasRealDigit) score += 10;
   if (/^\d{1,2}:\d{2}$/.test(normalized.text)) score += 8;
   if (/^\d{1,2}m$/.test(normalized.text)) score += 4;
-  score -= normalized.substitutionCount * 3;
-  score -= normalized.weakSubstitutionCount * 5;
-  score -= normalized.specialSubstitutionCount * 3;
+  score -= normalized.substitutions * 3;
+  score -= normalized.weakSubs * 5;
+  score -= normalized.specialSubs * 3;
   return score;
 }
 
-function readLineSafe(
+function readLine(
   capture: ImageData,
   font: OCR.FontDefinition,
   colors: OCR.ColortTriplet[],
@@ -305,7 +309,7 @@ function readLineSafe(
   }
 }
 
-function readSmallCapsSafe(
+function readBackwards(
   capture: ImageData,
   font: OCR.FontDefinition,
   colors: OCR.ColortTriplet[],

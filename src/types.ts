@@ -11,10 +11,10 @@ export interface DetectedSlot {
   previewDataUrl?: string;
 }
 
-export type AbilityScanAvailability = "available" | "unavailable" | "error";
+export type ScanAvailability = "available" | "unavailable" | "error";
 
-export interface AbilityScanResult {
-  availability: AbilityScanAvailability;
+export interface ScanResult {
+  availability: ScanAvailability;
   message: string;
   barsFound: number;
   slotsFound: number;
@@ -25,7 +25,7 @@ export interface AbilityScanResult {
   slots: DetectedSlot[];
 }
 
-export type ExpectedTrackingState =
+export type TrackingState =
   | "unavailable"
   | "acquiring-baseline"
   | "armed"
@@ -33,55 +33,55 @@ export type ExpectedTrackingState =
   | "cooldown-like"
   | "identity-lost";
 
-export interface ExpectedAbilityObservation {
+export interface Observation {
   abilityId: string;
   slotFound: boolean;
-  state: ExpectedTrackingState;
+  state: TrackingState;
   armed: boolean;
-  identitySimilarity: number;
+  similarity: number;
   brightness: number;
   brightnessRatio?: number;
   gcdTransient: boolean;
-  cooldownRawText?: string;
-  cooldownSeconds?: number;
+  cooldownText?: string;
+  cooldown?: number;
   cooldownFrames: number;
-  observationMs: number;
-  useEvent: boolean;
-  useEventCount: number;
-  detectionLatencyMs?: number;
+  sampleMs: number;
+  used: boolean;
+  useCount: number;
+  latencyMs?: number;
   message: string;
 }
 
-export type AbilityStyle = "Melee" | "Magic" | "Ranged" | "Necromancy" | "Defensive" | "Utility";
+export type Style = "Melee" | "Magic" | "Ranged" | "Necromancy" | "Defensive" | "Utility";
 
-export interface AbilityDefinition {
+export interface Ability {
   id: string;
   name: string;
-  style: AbilityStyle;
+  style: Style;
   icon: string;
   cooldownSeconds?: number;
 }
 
-export interface RotationStep {
+export interface Step {
   abilityId: string;
 }
 
-export type RotationCategory = "melee" | "magic" | "ranged" | "necro" | "hybrid";
+export type Category = "melee" | "magic" | "ranged" | "necro" | "hybrid";
 
 export interface Rotation {
   id: string;
   name: string;
-  category: RotationCategory;
-  steps: RotationStep[];
+  category: Category;
+  steps: Step[];
 }
 
-export interface CueItem {
-  step: RotationStep;
+export interface Cue {
+  step: Step;
   stepIndex: number;
   offset: number;
 }
 
-export interface ScreenPoint {
+export interface Point {
   x: number;
   y: number;
 }
