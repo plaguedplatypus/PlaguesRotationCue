@@ -61,7 +61,7 @@ export function mountApp(root: HTMLElement, state: State): void {
   cueOverlay.setBorderColor(settings.cueBorderColor);
   cueOverlay.setOpacity(settings.overlayOpacity);
   cueOverlay.setNames(settings.showAbilityNames);
-  cueOverlay.setKeybindVisible(settings.showNextLabel);
+  cueOverlay.setLabelsShown(settings.showNextLabel);
   cueOverlay.setKeybinds(keybinds);
   cueOverlay.setAutoAdvance(settings.autoAdvanceRotation);
 
@@ -221,6 +221,7 @@ export function mountApp(root: HTMLElement, state: State): void {
       return;
     }
 
+    // setInterval does not wait for OCR.
     polling = true;
     let retryAfter = false;
     let cueChanged = false;
@@ -355,6 +356,7 @@ export function mountApp(root: HTMLElement, state: State): void {
       void cueOverlay.drawPreview(upcoming(settings.upcomingAbilities), position);
     }, 100);
 
+    // The preview follows the cursor.
     placementListener = (event): void => {
       if (!placingOverlay) return;
       const position = cleanPoint(event.mouseRs ?? { x: event.x, y: event.y });
@@ -596,7 +598,7 @@ export function mountApp(root: HTMLElement, state: State): void {
       const showNextLabel = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, showNextLabel };
       saveSettings(settings);
-      cueOverlay.setKeybindVisible(showNextLabel);
+      cueOverlay.setLabelsShown(showNextLabel);
       if (settings.showCueOverlay && !placingOverlay) {
         void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }

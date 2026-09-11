@@ -1,10 +1,10 @@
 import { latestRelease, releases } from "./updateNotes";
 
-const seenReleaseKey = "rotation-cue.update-toast-seen-id";
+const seenReleaseStorageId = "rotation-cue.update-toast-seen-id";
 
 function getSeenId(): string | null {
   try {
-    return window.localStorage.getItem(seenReleaseKey);
+    return window.localStorage.getItem(seenReleaseStorageId);
   } catch {
     return null;
   }
@@ -12,7 +12,7 @@ function getSeenId(): string | null {
 
 function markSeen(releaseId: string): void {
   try {
-    window.localStorage.setItem(seenReleaseKey, releaseId);
+    window.localStorage.setItem(seenReleaseStorageId, releaseId);
   } catch {
     return;
   }

@@ -40,6 +40,7 @@ export function parse(raw: string): Rotation {
   if (typeof rotation.name !== "string" || !rotation.name.trim()) throw new Error("The rotation name is missing.");
   if (!categories.includes(rotation.category as Category)) throw new Error("The rotation category is invalid.");
   if (!Array.isArray(rotation.steps)) throw new Error("The rotation steps are missing.");
+  // Imported files are untrusted, and a novel-length rotation would make the editor miserable.
   if (rotation.steps.length > 500) throw new Error("The rotation contains too many steps.");
   const steps = rotation.steps.map((step) => {
     if (!step || typeof step !== "object" || typeof step.abilityId !== "string"

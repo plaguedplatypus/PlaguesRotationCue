@@ -81,7 +81,7 @@ export class State {
   }
 
   moveStep(rotationId: string, fromIndex: number, toIndex: number): void {
-    const rotation = this.rotations.find((candidate) => candidate.id === rotationId);
+    const rotation = this.rotations.find((rotation) => rotation.id === rotationId);
     if (!rotation) return;
     const destination = Math.max(0, Math.min(toIndex, rotation.steps.length - 1));
     if (fromIndex < 0 || fromIndex >= rotation.steps.length || fromIndex === destination) return;
@@ -105,9 +105,9 @@ export class State {
   }
 
   import(rotation: Rotation): void {
-    const existingIndex = this.rotations.findIndex((candidate) => candidate.id === rotation.id);
+    const existingIndex = this.rotations.findIndex((stored) => stored.id === rotation.id);
     if (existingIndex >= 0) {
-      this.rotations = this.rotations.map((candidate) => candidate.id === rotation.id ? rotation : candidate);
+      this.rotations = this.rotations.map((stored) => stored.id === rotation.id ? rotation : stored);
     } else {
       this.rotations = [...this.rotations, rotation];
     }

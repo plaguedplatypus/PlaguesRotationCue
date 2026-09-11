@@ -31,7 +31,7 @@ type Template = {
 const sampleWidth = 24;
 const sampleHeight = 18;
 const alignmentRadius = 2;
-const alignCandidates = 12;
+const alignLimit = 12;
 const emptyMinScore = 0.78;
 const emptyTolerance = 0.03;
 
@@ -61,12 +61,12 @@ export class Matcher {
 
     const center = sample(image, rect);
     let emptyScore = emptyTemplate ? dot(center, emptyTemplate) : -1;
-    const candidates = templates
+    const matches = templates
       .map((template) => ({ template, score: dot(center, template.vector) }))
       .sort((left, right) => right.score - left.score)
-      .slice(0, alignCandidates);
+      .slice(0, alignLimit);
     const scores = new Map(
-      candidates.map(({ template, score }) => [template.abilityId, score])
+      matches.map(({ template, score }) => [template.abilityId, score])
     );
 
     for (let deltaY = -alignmentRadius; deltaY <= alignmentRadius; deltaY++) {
@@ -78,7 +78,7 @@ export class Matcher {
           y: rect.y + deltaY
         });
         if (emptyTemplate) emptyScore = Math.max(emptyScore, dot(vector, emptyTemplate));
-        for (const { template } of candidates) {
+        for (const { template } of matches) {
           const score = dot(vector, template.vector);
           if (score > (scores.get(template.abilityId) ?? -1)) {
             scores.set(template.abilityId, score);
@@ -157,7 +157,7 @@ export class Matcher {
   ): Promise<IconSample[]> {
     const wanted = new Set(abilityIds);
     const templates = (await this.prepare())
-      .filter((candidate) => wanted.has(candidate.abilityId));
+      .filter((template) => wanted.has(template.abilityId));
     if (!templates.length) return [];
 
     const similarities = new Map(templates.map((template) => [template.abilityId, -1]));

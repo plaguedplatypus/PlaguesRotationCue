@@ -222,13 +222,13 @@ export class Reader implements ReaderApi {
       rect,
       nextAbilityId ? [abilityId, nextAbilityId] : [abilityId]
     );
-    const measurement = measurements.find((candidate) => candidate.abilityId === abilityId);
+    const measurement = measurements.find((measurement) => measurement.abilityId === abilityId);
     if (!measurement) {
       return this.observation(abilityId, "unavailable", true, 0, 0, startedAt,
         "Expected ability template is unavailable.");
     }
     const nextMeasurement = nextAbilityId
-      ? measurements.find((candidate) => candidate.abilityId === nextAbilityId)
+      ? measurements.find((measurement) => measurement.abilityId === nextAbilityId)
       : undefined;
 
     const maxCooldown = abilityById.get(abilityId)?.cooldownSeconds
@@ -251,6 +251,7 @@ export class Reader implements ReaderApi {
       && cooldownValue > 0
       && (cooldown.reliable !== false || !matched);
     let useSignal = hasCooldown;
+    // Sequence abilities swap artwork in place.
     const stageChanged = this.tracking.armed
       && nextMeasurement !== undefined
       && nextMeasurement.similarity >= transitionScore

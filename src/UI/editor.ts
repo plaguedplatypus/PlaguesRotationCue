@@ -88,7 +88,7 @@ export function renderEditor(
   });
 
   if (deleteId) {
-    const rotation = state.rotations.find((candidate) => candidate.id === deleteId);
+    const rotation = state.rotations.find((rotation) => rotation.id === deleteId);
     if (rotation) container.append(deletePrompt(rotation, state, context));
     else deleteId = null;
   }
@@ -464,7 +464,7 @@ function importRotation(state: State, showMessage: (message: string) => void): v
     if (!file) return;
     try {
       const rotation = parse(await file.text());
-      const existing = state.rotations.some((candidate) => candidate.id === rotation.id);
+      const existing = state.rotations.some((stored) => stored.id === rotation.id);
       showMessage(existing
         ? `Updated “${rotation.name}” from its matching ID.`
         : `Imported “${rotation.name}”.`);

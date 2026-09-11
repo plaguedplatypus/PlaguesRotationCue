@@ -45,7 +45,7 @@ const minStructureScore = 0.86;
 const originTolerance = 5;
 const controlTolerance = 1;
 
-// These offsets are measured from the action-bar cog to slot 1.
+// measured from the action-bar cog to slot 1.
 const layouts: readonly Layout[] = [
   {
     id: "flat", columns: 14, rows: 1, pitchX: 36, pitchY: 0, order: "row",
@@ -86,10 +86,10 @@ export class Locator {
     const bars: Bar[] = [];
 
     for (const cog of cogs) {
-      // Only the main bar has the adrenaline anchor; detached bars rely on their cog.
+      // the main bar has the adrenaline anchor; detached bars rely on their cog.
       const mainLayout = layouts.find((layout) => isMainBar(cog, layout, mainAnchors));
       if (mainLayout) {
-        const main = makeCandidate(screen, cog, mainLayout, false);
+        const main = makeBar(screen, cog, mainLayout, false);
         if (main) {
           main.kind = "main";
           if (!bars.some((bar) => bar.kind === "main")) bars.push(main);
@@ -99,9 +99,9 @@ export class Locator {
 
       let best: Bar | null = null;
       for (const layout of layouts) {
-        const candidate = makeCandidate(screen, cog, layout);
-        if (!candidate) continue;
-        if (!best || candidate.score > best.score) best = candidate;
+        const match = makeBar(screen, cog, layout);
+        if (!match) continue;
+        if (!best || match.score > best.score) best = match;
       }
       if (best && !bars.some((bar) => sameOrigin(bar, best!))) {
         bars.push(best);
@@ -115,19 +115,19 @@ export class Locator {
         x: bar.x - layout.firstFromCog.x,
         y: bar.y - layout.firstFromCog.y
       };
-      // The nearby control button confirms layouts with the same cog position.
+      // nearby control button confirms layouts with the same cog position.
       const corrected = layouts.find((entry) => controls.some((control) =>
         Math.abs(control.x - (cog.x + entry.controlFromCog.x)) <= controlTolerance
         && Math.abs(control.y - (cog.y + entry.controlFromCog.y)) <= controlTolerance
       ));
       if (corrected) {
-        const candidate = makeCandidate(screen, cog, corrected);
-        if (candidate) {
-          bar.layout = candidate.layout;
-          bar.x = candidate.x;
-          bar.y = candidate.y;
-          bar.score = candidate.score;
-          bar.slots = candidate.slots;
+        const match = makeBar(screen, cog, corrected);
+        if (match) {
+          bar.layout = match.layout;
+          bar.x = match.x;
+          bar.y = match.y;
+          bar.score = match.score;
+          bar.slots = match.slots;
         }
       }
       bar.kind = "secondary";
@@ -282,7 +282,7 @@ function getSlots(x: number, y: number, layout: Layout): Slot[] {
   return slots;
 }
 
-function makeCandidate(
+function makeBar(
   screen: a1lib.ImgRef,
   cog: { x: number; y: number },
   layout: Layout,
@@ -310,11 +310,11 @@ function isMainBar(
   layout: Layout,
   mainPositions: readonly { x: number; y: number }[]
 ): boolean {
-  const candidateX = cog.x + layout.firstFromCog.x;
-  const candidateY = cog.y + layout.firstFromCog.y;
+  const barX = cog.x + layout.firstFromCog.x;
+  const barY = cog.y + layout.firstFromCog.y;
   return mainPositions.some((anchor) =>
-    Math.abs(candidateX - (anchor.x + layout.firstFromAnchor.x)) <= originTolerance
-    && Math.abs(candidateY - (anchor.y + layout.firstFromAnchor.y)) <= originTolerance
+    Math.abs(barX - (anchor.x + layout.firstFromAnchor.x)) <= originTolerance
+    && Math.abs(barY - (anchor.y + layout.firstFromAnchor.y)) <= originTolerance
   );
 }
 
@@ -330,6 +330,7 @@ function scoreLayout(screen: a1lib.ImgRef, slots: readonly Slot[]): number {
   const right = Math.max(...slots.map((slot) => slot.x + slot.width));
   const bottom = Math.max(...slots.map((slot) => slot.y + slot.height));
   const image = screen.toData(left, top, right - left, bottom - top);
+  // slots have dark rims. The game does not give us a nicer tell, because of course it doesn't.
   let dark = 0;
   let sampled = 0;
   for (const slot of slots) {

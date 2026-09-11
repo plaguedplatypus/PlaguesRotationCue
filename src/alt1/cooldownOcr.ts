@@ -33,7 +33,7 @@ type ParsedText = {
   specialSubs: number;
 };
 
-type Candidate = {
+type Option = {
   rawText: string;
   seconds: number;
   reliable: boolean;
@@ -77,7 +77,7 @@ export function readCooldown(
   rect: SlotRect,
   options: OcrOptions = {}
 ): OcrResult {
-  const candidates: Candidate[] = [];
+  const matches: Option[] = [];
   let rejected = "";
 
   const consider = (
@@ -94,7 +94,7 @@ export function readCooldown(
       ? Math.ceil(options.max)
       : maxSeconds;
     if (seconds !== undefined && seconds <= limit) {
-      candidates.push({
+      matches.push({
         rawText: raw,
         seconds,
         reliable: source === "digits"
@@ -153,8 +153,8 @@ export function readCooldown(
     );
   }
 
-  candidates.sort((left, right) => right.score - left.score);
-  const best = candidates[0];
+  matches.sort((left, right) => right.score - left.score);
+  const best = matches[0];
   return best
     ? { rawText: best.rawText, seconds: best.seconds, reliable: best.reliable }
     : { rawText: rejected };

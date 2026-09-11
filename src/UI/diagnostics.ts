@@ -161,11 +161,11 @@ function slotRow(slot: DetectedSlot): string {
       </div>`;
   }
 
-  const candidate = ability?.name ? `Best: ${ability.name}` : "No candidate";
+  const bestMatch = ability?.name ? `Best: ${ability.name}` : "No match";
   return `
     <div class="detected-row is-unknown" role="listitem">
       ${slot.previewDataUrl ? `<img class="capture-preview" src="${slot.previewDataUrl}" alt="Captured slot">` : `<div class="unknown-icon">?</div>`}
-      <div><strong>Unknown slot</strong><small>${location} · ${escapeHtml(candidate)} · ${margin} · ${escapeHtml(slot.rejectionReason ?? "Rejected")}</small></div>
+      <div><strong>Unknown slot</strong><small>${location} · ${escapeHtml(bestMatch)} · ${margin} · ${escapeHtml(slot.rejectionReason ?? "Rejected")}</small></div>
       <span class="match-confidence">${confidence}</span>
       <span class="state-pill">rejected</span>
     </div>`;

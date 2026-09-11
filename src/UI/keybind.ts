@@ -7,13 +7,13 @@ import {
 } from "../data/abilityData";
 import type { ScanResult, DetectedSlot } from "../types";
 
-const storageKey = "rotation-cue.visual-keybinds.v1";
+const storageId = "rotation-cue.visual-keybinds.v1";
 
 export type Keybinds = Record<string, string>;
 
 export function loadKeybinds(): Keybinds {
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as unknown;
+    const stored = JSON.parse(localStorage.getItem(storageId) ?? "null") as unknown;
     if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
     return Object.fromEntries(Object.entries(stored).flatMap(([abilityId, value]) =>
       typeof value === "string" && value.trim() ? [[abilityId, value.trim()]] : []
@@ -24,10 +24,10 @@ export function loadKeybinds(): Keybinds {
 }
 
 export function saveKeybinds(keybinds: Keybinds): void {
-  localStorage.setItem(storageKey, JSON.stringify(keybinds));
+  localStorage.setItem(storageId, JSON.stringify(keybinds));
 }
 
-export function cueKeys(
+export function cueLabels(
   abilityId: string,
   keybinds: Keybinds,
   autoAdvance: boolean

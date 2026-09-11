@@ -1,7 +1,7 @@
 import type { Point } from "../types";
 import { appVersion } from "../updates/updateNotes";
 
-const storageKey = "rotation-cue.interface-settings.v1";
+const storageId = "rotation-cue.interface-settings.v1";
 
 export interface Settings {
   autoAdvanceRotation: boolean;
@@ -35,7 +35,7 @@ const defaults: Settings = {
 
 export function loadSettings(): Settings {
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<Settings> | null;
+    const stored = JSON.parse(localStorage.getItem(storageId) ?? "null") as Partial<Settings> | null;
     const settings: Settings = {
       autoAdvanceRotation: typeof stored?.autoAdvanceRotation === "boolean"
         ? stored.autoAdvanceRotation
@@ -70,7 +70,7 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(settings: Settings): void {
-  localStorage.setItem(storageKey, JSON.stringify(settings));
+  localStorage.setItem(storageId, JSON.stringify(settings));
 }
 
 export function modalMarkup(settings: Settings, positioning = false): string {

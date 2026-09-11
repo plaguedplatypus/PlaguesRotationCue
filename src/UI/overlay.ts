@@ -1,7 +1,7 @@
 import { encodeImageString } from "alt1/base";
 import { entryById } from "../data/abilityData";
 import type { Cue, Point } from "../types";
-import { cueKeys, type Keybinds } from "./keybind";
+import { cueLabels, type Keybinds } from "./keybind";
 
 const groupName = "rotation-cue-strip";
 const cueCount = 4;
@@ -88,7 +88,7 @@ export class CueOverlay {
     this.lastDrawAt = 0;
   }
 
-  setKeybindVisible(show: boolean): void {
+  setLabelsShown(show: boolean): void {
     if (this.showNextLabel === show) return;
     this.showNextLabel = show;
     this.lastSignature = "";
@@ -134,7 +134,7 @@ export class CueOverlay {
 
     const positionSignature = position ? `${position.x},${position.y}` : "default";
     const visualSequence = cues.map((cue) => cue.offset === 0
-      ? cueKeys(cue.step.abilityId, this.keybinds, this.autoAdvance).join("+")
+      ? cueLabels(cue.step.abilityId, this.keybinds, this.autoAdvance).join("+")
       : "").join("|");
     const cooldownSignature = this.currentCooldown
       ? `${this.currentCooldown.abilityId}:${this.currentCooldown.seconds}`
@@ -150,12 +150,12 @@ export class CueOverlay {
     const frameInset = 3;
     const backgroundBorder = 1;
     const currentCue = cues.find((cue) => cue.offset === 0);
-    const currentKeys = currentCue && this.showNextLabel
-      ? cueKeys(currentCue.step.abilityId, this.keybinds, this.autoAdvance)
+    const currentLabels = currentCue && this.showNextLabel
+      ? cueLabels(currentCue.step.abilityId, this.keybinds, this.autoAdvance)
       : [];
     const measuringContext = document.createElement("canvas").getContext("2d");
     const badgeWidth = measuringContext
-      ? measureKeys(measuringContext, currentKeys)
+      ? measureLabels(measuringContext, currentLabels)
       : 0;
     const visualGutter = badgeWidth
       ? Math.max(0, Math.ceil((badgeWidth - tileWidth) / 2) + this.borderThickness)
@@ -221,11 +221,11 @@ export class CueOverlay {
       context.textAlign = "center";
       context.textBaseline = "alphabetic";
       if (current && this.showNextLabel) {
-        drawKeys(
+        drawLabels(
           context,
           x + tileWidth / 2,
           6,
-          cueKeys(cue.step.abilityId, this.keybinds, this.autoAdvance),
+          cueLabels(cue.step.abilityId, this.keybinds, this.autoAdvance),
           this.borderColor,
           this.borderThickness
         );
@@ -386,14 +386,14 @@ function drawArrow(context: CanvasRenderingContext2D, centerX: number, centerY: 
   context.restore();
 }
 
-function measureKeys(context: CanvasRenderingContext2D, keybinds: string[]): number {
+function measureLabels(context: CanvasRenderingContext2D, keybinds: string[]): number {
   if (!keybinds.length) return 0;
   context.font = "bold 10px Arial";
-  const keyWidths = keybinds.map((keybind) => Math.max(14, Math.ceil(context.measureText(keybind).width) + 6));
-  return keyWidths.reduce((total, width) => total + width, 0) + Math.max(0, keybinds.length - 1) * 9;
+  const widths = keybinds.map((keybind) => Math.max(14, Math.ceil(context.measureText(keybind).width) + 6));
+  return widths.reduce((total, width) => total + width, 0) + Math.max(0, keybinds.length - 1) * 9;
 }
 
-function drawKeys(
+function drawLabels(
   context: CanvasRenderingContext2D,
   centerX: number,
   y: number,
@@ -405,13 +405,13 @@ function drawKeys(
   context.font = "bold 10px Arial";
   context.textAlign = "center";
   context.textBaseline = "alphabetic";
-  const keyWidths = keybinds.map((keybind) => Math.max(14, Math.ceil(context.measureText(keybind).width) + 6));
-  const totalWidth = keyWidths.reduce((total, width) => total + width, 0)
+  const widths = keybinds.map((keybind) => Math.max(14, Math.ceil(context.measureText(keybind).width) + 6));
+  const totalWidth = widths.reduce((total, width) => total + width, 0)
     + Math.max(0, keybinds.length - 1) * 9;
   let x = centerX - totalWidth / 2;
 
   keybinds.forEach((keybind, index) => {
-    const width = keyWidths[index];
+    const width = widths[index];
     const height = 13;
     context.fillStyle = "rgba(13, 17, 23, 0.96)";
     context.fillRect(x, y, width, height);
@@ -480,6 +480,7 @@ function scaleRegion(x: number, y: number, width: number, height: number, scale:
 
 function applyOpacity(image: ImageData, opacity: number, regions: Region[]): void {
   if (opacity >= 1) return;
+  // Keep labels and borders crisp; only the icon pixels get the dither treatment.
   const visibleLevels = Math.max(0, Math.min(64, Math.round(opacity * 64)));
   for (const region of regions) {
     const left = Math.max(0, region.left);
