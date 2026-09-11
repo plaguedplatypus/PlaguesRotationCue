@@ -1,10 +1,4 @@
-import {
-  bindingId,
-  nextSequenceId,
-  entryById,
-  sequenceCooldown,
-  sequenceFor
-} from "../data/abilityData";
+import { bindingId, nextSequenceId, entryById, sequenceCooldown, sequenceFor } from "../data/abilityData";
 import type { ScanResult, DetectedSlot } from "../types";
 
 const storageId = "rotation-cue.visual-keybinds.v1";

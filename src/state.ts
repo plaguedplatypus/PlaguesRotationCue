@@ -1,11 +1,4 @@
-import {
-  loadActiveId,
-  loadRotations,
-  loadCategory,
-  saveActiveId,
-  saveRotations,
-  saveCategory
-} from "./rotation/storage";
+import { loadActiveId, loadRotations, loadCategory, saveActiveId, saveRotations, saveCategory } from "./rotation/storage";
 import type { Rotation, Category } from "./types";
 
 type Listener = () => void;

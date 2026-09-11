@@ -7,19 +7,9 @@ import type { State } from "../state";
 import type { ScanResult, Observation, Point } from "../types";
 import { bodyMarkup, panelMarkup, statusText } from "./diagnostics";
 import { renderEditor } from "./editor";
-import {
-  bindFields,
-  loadKeybinds,
-  saveKeybinds,
-  modalMarkup as keybindModal
-} from "./keybind";
+import { bindFields, loadKeybinds, saveKeybinds, modalMarkup as keybindModal } from "./keybind";
 import { CueOverlay, isAlt1Available } from "./overlay";
-import {
-  bindRanges,
-  loadSettings,
-  saveSettings,
-  modalMarkup as settingsModal
-} from "./settings";
+import { bindRanges, loadSettings, saveSettings, modalMarkup as settingsModal } from "./settings";
 import { showPatchNotes } from "../updates/updateToast";
 
 const pollMs = 250;
@@ -52,8 +42,8 @@ export function mountApp(root: HTMLElement, state: State): void {
   let placingOverlay = false;
   let placementTimer: number | null = null;
   let placementListener: ((event: a1lib.Alt1EventType["alt1pressed"]) => void) | null = null;
-  let footerText = "";
-  let footerTimer: number | null = null;
+  let message = "";
+  let msgTimer: number | null = null;
   engine.setRotation(state.active);
   cueOverlay.setPosition(settings.overlayPosition);
   cueOverlay.setScale(settings.cueScale);
@@ -67,24 +57,24 @@ export function mountApp(root: HTMLElement, state: State): void {
 
   const upcoming = (count: number) => engine.upcomingSteps(count, settings.loopRotationAtEnd);
 
-  const updateFooter = (): void => {
-    const footer = root.querySelector<HTMLElement>(".app-footer");
-    const text = footer?.querySelector<HTMLElement>("span");
-    if (!footer || !text) return;
-    footer.classList.toggle("has-message", !!footerText);
-    text.textContent = footerText || (state.active
+  const updateMsg = (): void => {
+    const Msg = root.querySelector<HTMLElement>(".app-footer");
+    const text = Msg?.querySelector<HTMLElement>("span");
+    if (!Msg || !text) return;
+    Msg.classList.toggle("has-message", !!message);
+    text.textContent = message || (state.active
       ? `Active: ${state.active.name}`
       : "No active rotation");
   };
 
   const showMessage = (message: string): void => {
-    footerText = message;
-    if (footerTimer !== null) window.clearTimeout(footerTimer);
-    updateFooter();
-    footerTimer = window.setTimeout(() => {
-      footerText = "";
-      footerTimer = null;
-      updateFooter();
+    message;
+    if (msgTimer !== null) window.clearTimeout(msgTimer);
+    updateMsg();
+    msgTimer = window.setTimeout(() => {
+      message = "";
+      msgTimer = null;
+      updateMsg();
     }, messageMs);
   };
 
@@ -425,8 +415,8 @@ export function mountApp(root: HTMLElement, state: State): void {
         open: diagnosticsOpen,
         visible: settings.showDiagnostics
       })}
-      <footer class="app-footer${footerText ? " has-message" : ""}"><span>${footerText
-        ? escapeHtml(footerText)
+      <footer class="app-footer${message ? " has-message" : ""}"><span>${message
+        ? escapeHtml(message)
         : state.active ? `Active: ${escapeHtml(state.active.name)}` : "No active rotation"}</span></footer>
       ${settingsOpen
         ? keybindsOpen
@@ -663,7 +653,7 @@ export function mountApp(root: HTMLElement, state: State): void {
     cueOverlay.clear();
     slotOverlay.clear();
     window.clearInterval(keepaliveTimer);
-    if (footerTimer !== null) window.clearTimeout(footerTimer);
+    if (msgTimer !== null) window.clearTimeout(msgTimer);
   };
   window.addEventListener("pagehide", cleanup);
   window.addEventListener("beforeunload", cleanup);

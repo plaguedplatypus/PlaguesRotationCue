@@ -1,12 +1,5 @@
 import type { Ability, Style, Category } from "../types";
-import {
-  sequences as catalogSequences,
-  sections,
-  categoryUi,
-  pickers,
-  type CategoryScope,
-  type PickerId
-} from "./catalog";
+import { sequences as catalogSequences, sections, categoryUi, pickers, type CategoryScope, type PickerId } from "./catalog";
 
 export type { PickerId } from "./catalog";
 

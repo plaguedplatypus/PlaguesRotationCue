@@ -1,24 +1,8 @@
 import * as a1lib from "alt1/base";
-import type {
-  ScanResult,
-  DetectedSlot,
-  Observation,
-  TrackingState
-} from "../types";
-import {
-  abilityById,
-  nextSequenceId,
-  sequenceCooldown,
-  sequenceFor
-} from "../data/abilityData";
+import type { ScanResult, DetectedSlot, Observation, TrackingState } from "../types";
+import { abilityById, nextSequenceId, sequenceCooldown, sequenceFor } from "../data/abilityData";
 import { Matcher, type IconMatch } from "./iconMatcher";
-import {
-  clearGeometry,
-  Locator,
-  showGeometry,
-  type SlotLocation,
-  type Slot
-} from "./actionBar";
+import { clearGeometry, Locator, showGeometry, type SlotLocation, type Slot } from "./actionBar";
 import { readCooldown } from "./cooldownOcr";
 
 const discoverySamples = 3;

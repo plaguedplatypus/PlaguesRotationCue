@@ -1,14 +1,6 @@
-import {
-  entriesForSection,
-  pickerDef,
-  pickerSectionsFor,
-  entryById
-} from "../data/abilityData";
+import { entriesForSection, pickerDef, pickerSectionsFor, entryById } from "../data/abilityData";
 import type { PickerId, CatalogItem } from "../data/abilityData";
-import {
-  loadCollapsedIds,
-  saveCollapsedIds
-} from "../rotation/storage";
+import { loadCollapsedIds, saveCollapsedIds } from "../rotation/storage";
 import { parse, serialize } from "../rotation/transfer";
 import type { State } from "../state";
 import type { Rotation, Category } from "../types";
