@@ -3,6 +3,16 @@ import * as a1lib from "alt1/base";
 export type LayoutId = "flat" | "grid" | "tower" | "vertical";
 export type BarKind = "main" | "secondary";
 
+type Mode = "modern" | "classic";
+
+type Placement = {
+  mode: Mode;
+  fromCog: { x: number; y: number };
+  fromAdrenaline: { x: number; y: number };
+  pitchX: number;
+  pitchY: number;
+};
+
 export interface Slot {
   x: number;
   y: number;
@@ -32,11 +42,8 @@ type Layout = {
   id: LayoutId;
   columns: number;
   rows: number;
-  pitchX: number;
-  pitchY: number;
   order: "row" | "column";
-  firstFromCog: { x: number; y: number };
-  firstFromAnchor: { x: number; y: number };
+  placements: readonly Placement[];
   controlFromCog: { x: number; y: number };
 };
 
@@ -45,30 +52,50 @@ const minStructureScore = 0.86;
 const originTolerance = 5;
 const controlTolerance = 1;
 
-// measured from the action-bar cog to slot 1.
 const layouts: readonly Layout[] = [
   {
-    id: "flat", columns: 14, rows: 1, pitchX: 36, pitchY: 0, order: "row",
-    firstFromCog: { x: -505, y: -16 },
-    firstFromAnchor: { x: -126, y: 33 },
+    id: "flat", columns: 14, rows: 1, order: "row",
+    // Classic leaves more space between the slots and the right-side controls.
+    placements: [
+      {
+        mode: "modern", fromCog: { x: -505, y: -16 }, fromAdrenaline: { x: -126, y: 33 },
+        pitchX: 36, pitchY: 0
+      },
+      {
+        mode: "classic", fromCog: { x: -524, y: -16 }, fromAdrenaline: { x: -130, y: 33 },
+        pitchX: 37, pitchY: 0
+      }
+    ],
     controlFromCog: { x: -4, y: -17 }
   },
   {
-    id: "grid", columns: 7, rows: 2, pitchX: 35, pitchY: 35, order: "row",
-    firstFromCog: { x: -243, y: -52 },
-    firstFromAnchor: { x: -122, y: 52 },
+    id: "grid", columns: 7, rows: 2, order: "row",
+    placements: [
+      {
+        mode: "modern", fromCog: { x: -243, y: -53 }, fromAdrenaline: { x: -122, y: 53 },
+        pitchX: 35, pitchY: 35
+      }
+    ],
     controlFromCog: { x: -4, y: -55 }
   },
   {
-    id: "tower", columns: 2, rows: 7, pitchX: 35, pitchY: 35, order: "column",
-    firstFromCog: { x: -52, y: -243 },
-    firstFromAnchor: { x: -71, y: -130 },
+    id: "tower", columns: 2, rows: 7, order: "column",
+    placements: [
+      {
+        mode: "modern", fromCog: { x: -53, y: -243 }, fromAdrenaline: { x: -71, y: -130 },
+        pitchX: 35, pitchY: 35
+      }
+    ],
     controlFromCog: { x: -58, y: -1 }
   },
   {
-    id: "vertical", columns: 1, rows: 14, pitchX: 0, pitchY: 36, order: "column",
-    firstFromCog: { x: -16, y: -505 },
-    firstFromAnchor: { x: -39, y: -138 },
+    id: "vertical", columns: 1, rows: 14, order: "column",
+    placements: [
+      {
+        mode: "modern", fromCog: { x: -16, y: -505 }, fromAdrenaline: { x: -39, y: -138 },
+        pitchX: 0, pitchY: 36
+      }
+    ],
     controlFromCog: { x: -20, y: -1 }
   }
 ];
@@ -84,53 +111,32 @@ export class Locator {
     const controls = screen.findSubimage(anchors.control);
     const mainAnchors = anchors.adrenaline.flatMap((anchor) => screen.findSubimage(anchor));
     const bars: Bar[] = [];
+    const mainMatch = findMain(cogs, mainAnchors);
+    const mode = mainMatch?.placement.mode;
 
-    for (const cog of cogs) {
-      // the main bar has the adrenaline anchor; detached bars rely on their cog.
-      const mainLayout = layouts.find((layout) => isMainBar(cog, layout, mainAnchors));
-      if (mainLayout) {
-        const main = makeBar(screen, cog, mainLayout, false);
-        if (main) {
-          main.kind = "main";
-          if (!bars.some((bar) => bar.kind === "main")) bars.push(main);
-          continue;
-        }
-      }
-
-      let best: Bar | null = null;
-      for (const layout of layouts) {
-        const match = makeBar(screen, cog, layout);
-        if (!match) continue;
-        if (!best || match.score > best.score) best = match;
-      }
-      if (best && !bars.some((bar) => sameOrigin(bar, best!))) {
-        bars.push(best);
+    if (mainMatch) {
+      const main = makeBar(screen, mainMatch.cog, mainMatch.layout, mainMatch.placement, false);
+      if (main) {
+        main.kind = "main";
+        bars.push(main);
       }
     }
 
-    for (const bar of bars) {
-      if (bar.kind === "main") continue;
-      const layout = layouts.find((entry) => entry.id === bar.layout)!;
-      const cog = {
-        x: bar.x - layout.firstFromCog.x,
-        y: bar.y - layout.firstFromCog.y
-      };
+    for (const cog of cogs) {
+      let best = findBar(screen, cog, layouts, mode);
+
       // nearby control button confirms layouts with the same cog position.
       const corrected = layouts.find((entry) => controls.some((control) =>
         Math.abs(control.x - (cog.x + entry.controlFromCog.x)) <= controlTolerance
         && Math.abs(control.y - (cog.y + entry.controlFromCog.y)) <= controlTolerance
       ));
       if (corrected) {
-        const match = makeBar(screen, cog, corrected);
-        if (match) {
-          bar.layout = match.layout;
-          bar.x = match.x;
-          bar.y = match.y;
-          bar.score = match.score;
-          bar.slots = match.slots;
-        }
+        const match = findBar(screen, cog, [corrected], mode);
+        if (match) best = match;
       }
-      bar.kind = "secondary";
+      if (best && !bars.some((bar) => sameOrigin(bar, best!))) {
+        bars.push(best);
+      }
     }
 
     bars.sort((left, right) => {
@@ -262,7 +268,7 @@ function overlayColor(value: string): number {
   );
 }
 
-function getSlots(x: number, y: number, layout: Layout): Slot[] {
+function getSlots(x: number, y: number, layout: Layout, placement: Placement): Slot[] {
   const slots: Slot[] = [];
   for (let index = 0; index < 14; index++) {
     const column = layout.order === "row"
@@ -272,8 +278,8 @@ function getSlots(x: number, y: number, layout: Layout): Slot[] {
       ? Math.floor(index / layout.columns)
       : index % layout.rows;
     slots.push({
-      x: x + column * layout.pitchX,
-      y: y + row * layout.pitchY,
+      x: x + column * placement.pitchX,
+      y: y + row * placement.pitchY,
       width: slotSize,
       height: slotSize,
       index
@@ -286,11 +292,12 @@ function makeBar(
   screen: a1lib.ImgRef,
   cog: { x: number; y: number },
   layout: Layout,
+  placement: Placement,
   requireStructure = true
 ): Bar | null {
-  const x = cog.x + layout.firstFromCog.x;
-  const y = cog.y + layout.firstFromCog.y;
-  const slots = getSlots(x, y, layout);
+  const x = cog.x + placement.fromCog.x;
+  const y = cog.y + placement.fromCog.y;
+  const slots = getSlots(x, y, layout, placement);
   if (!fitsScreen(screen, slots)) return null;
   const score = scoreLayout(screen, slots);
   if (requireStructure && score < minStructureScore) return null;
@@ -305,16 +312,50 @@ function makeBar(
   };
 }
 
+function findBar(
+  screen: a1lib.ImgRef,
+  cog: { x: number; y: number },
+  selected: readonly Layout[],
+  mode?: Mode
+): Bar | null {
+  let best: Bar | null = null;
+  for (const layout of selected) {
+    const preferred = mode
+      ? layout.placements.filter((placement) => placement.mode === mode)
+      : layout.placements;
+    const placements = preferred.length ? preferred : layout.placements;
+    for (const placement of placements) {
+      const match = makeBar(screen, cog, layout, placement);
+      if (match && (!best || match.score > best.score)) best = match;
+    }
+  }
+  return best;
+}
+
+function findMain(
+  cogs: readonly { x: number; y: number }[],
+  mainPositions: readonly { x: number; y: number }[]
+) {
+  for (const cog of cogs) {
+    for (const layout of layouts) {
+      for (const placement of layout.placements) {
+        if (isMainBar(cog, placement, mainPositions)) return { cog, layout, placement };
+      }
+    }
+  }
+  return null;
+}
+
 function isMainBar(
   cog: { x: number; y: number },
-  layout: Layout,
+  placement: Placement,
   mainPositions: readonly { x: number; y: number }[]
 ): boolean {
-  const barX = cog.x + layout.firstFromCog.x;
-  const barY = cog.y + layout.firstFromCog.y;
+  const barX = cog.x + placement.fromCog.x;
+  const barY = cog.y + placement.fromCog.y;
   return mainPositions.some((anchor) =>
-    Math.abs(barX - (anchor.x + layout.firstFromAnchor.x)) <= originTolerance
-    && Math.abs(barY - (anchor.y + layout.firstFromAnchor.y)) <= originTolerance
+    Math.abs(barX - (anchor.x + placement.fromAdrenaline.x)) <= originTolerance
+    && Math.abs(barY - (anchor.y + placement.fromAdrenaline.y)) <= originTolerance
   );
 }
 
