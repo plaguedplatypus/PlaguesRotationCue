@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const releases: ReleaseNote[] = [
   {
+    version: "1.2.0",
+    title: "Classic Interface",
+    items: [
+      "Added support for Classic Interface Layout.",
+    ]
+  },
+  {
     version: "1.1.2",
     title: "Sequence Abilities",
     items: [
