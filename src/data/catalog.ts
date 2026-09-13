@@ -121,7 +121,7 @@ export const categoryUi: Readonly<Record<Category, {
 };
 
 export const sections: readonly Section[] = [
-  // COMBAT
+  // *** Combat
   {
     id: "melee",
     label: "Melee abilities",
@@ -265,7 +265,7 @@ export const sections: readonly Section[] = [
     ]
   },
 
-  // SHARED
+  // *** Shared
   {
     id: "defensive",
     label: "Defensive abilities",
@@ -326,7 +326,7 @@ export const sections: readonly Section[] = [
     ]
   },
 
-  // MAGIC
+  // *** Magic
   {
     id: "normal_spells",
     label: "Normal spells",
@@ -405,7 +405,7 @@ export const sections: readonly Section[] = [
     ]
   },
 
-  // OTHER
+  // *** Other
   {
     id: "prayers",
     label: "Prayers",

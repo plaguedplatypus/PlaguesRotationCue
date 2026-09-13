@@ -1,4 +1,5 @@
 import { loadActiveId, loadRotations, loadCategory, saveActiveId, saveRotations, saveCategory } from "./rotation/storage";
+import type { Section, Step } from "./rotation/steps";
 import type { Rotation, Category } from "./types";
 
 type Listener = () => void;
@@ -52,36 +53,67 @@ export class State {
     this.persist();
   }
 
-  addStep(rotationId: string, abilityId: string): void {
+  addOnce(rotationId: string): void {
+    this.update(rotationId, (rotation) => rotation.once
+      ? rotation
+      : { ...rotation, once: [] });
+  }
+
+  removeOnce(rotationId: string): void {
+    this.update(rotationId, (rotation) => {
+      if (!rotation.once) return rotation;
+      const { once, ...rest } = rotation;
+      return { ...rest, steps: [...once, ...rotation.steps] };
+    });
+  }
+
+  addMore(rotationId: string, step: Step, section: Section = "repeat"): void {
     this.update(rotationId, (rotation) => ({
       ...rotation,
-      steps: [...rotation.steps, { abilityId }]
+      [section === "once" ? "once" : "steps"]: [
+        ...this.content(rotation, section),
+        step
+      ]
     }));
   }
 
-  replaceStep(rotationId: string, index: number, abilityId: string): void {
+  replaceStep(rotationId: string, section: Section, index: number, step: Step): void {
     this.update(rotationId, (rotation) => ({
       ...rotation,
-      steps: rotation.steps.map((step, stepIndex) => stepIndex === index ? { abilityId } : step)
+      [section === "once" ? "once" : "steps"]: this.content(rotation, section)
+        .map((current, stepIndex) => stepIndex === index ? step : current)
     }));
   }
 
-  removeStep(rotationId: string, index: number): void {
+  removeStep(rotationId: string, section: Section, index: number): void {
     this.update(rotationId, (rotation) => ({
       ...rotation,
-      steps: rotation.steps.filter((_, stepIndex) => stepIndex !== index)
+      [section === "once" ? "once" : "steps"]: this.content(rotation, section)
+        .filter((_, stepIndex) => stepIndex !== index)
     }));
   }
 
-  moveStep(rotationId: string, fromIndex: number, toIndex: number): void {
+  moveStep(
+    rotationId: string,
+    fromSection: Section,
+    fromIndex: number,
+    toSection: Section,
+    toIndex: number
+  ): void {
     const rotation = this.rotations.find((rotation) => rotation.id === rotationId);
     if (!rotation) return;
-    const destination = Math.max(0, Math.min(toIndex, rotation.steps.length - 1));
-    if (fromIndex < 0 || fromIndex >= rotation.steps.length || fromIndex === destination) return;
-    const steps = [...rotation.steps];
-    const [moved] = steps.splice(fromIndex, 1);
-    steps.splice(destination, 0, moved!);
-    this.update(rotationId, (current) => ({ ...current, steps }));
+    const source = [...this.content(rotation, fromSection)];
+    const target = fromSection === toSection ? source : [...this.content(rotation, toSection)];
+    if (fromIndex < 0 || fromIndex >= source.length) return;
+    const [moved] = source.splice(fromIndex, 1);
+    const destination = Math.max(0, Math.min(toIndex, target.length));
+    if (fromSection === toSection && fromIndex === destination) return;
+    target.splice(destination, 0, moved!);
+    this.update(rotationId, (current) => ({
+      ...current,
+      [fromSection === "once" ? "once" : "steps"]: source,
+      [toSection === "once" ? "once" : "steps"]: target
+    }));
   }
 
   moveRotation(rotationId: string, direction: -1 | 1): void {
@@ -115,6 +147,10 @@ export class State {
       rotation.id === rotationId ? update(rotation) : rotation
     );
     this.persist();
+  }
+
+  private content(rotation: Rotation, section: Section): Step[] {
+    return section === "once" ? rotation.once ?? [] : rotation.steps;
   }
 
   private persist(): void {

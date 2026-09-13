@@ -4,10 +4,7 @@ export type IconMatch = {
   abilityId: string;
   score: number;
   margin: number;
-  empty?: boolean;
-  emptyScore?: number;
   accepted: boolean;
-  rejectionReason?: string;
 };
 
 export type IconSample = {
@@ -56,7 +53,7 @@ export class Matcher {
       this.prepareEmpty()
     ]);
     if (!templates.length) {
-      return reject("Ability icon templates could not be loaded");
+      return reject();
     }
 
     const center = sample(image, rect);
@@ -105,10 +102,7 @@ export class Matcher {
         abilityId: "",
         score,
         margin,
-        empty: true,
-        emptyScore: emptyMatch,
-        accepted: false,
-        rejectionReason: "Empty slot"
+        accepted: false
       };
     }
     // These icons are identical in design, so I will accept the best color match and hope for the best.
@@ -131,14 +125,7 @@ export class Matcher {
       abilityId: best.abilityId,
       score,
       margin,
-      empty: false,
-      emptyScore: emptyMatch,
-      accepted,
-      rejectionReason: accepted
-        ? undefined
-        : score < 0.68
-          ? "Best match is too weak"
-          : "Best match is too similar to another icon"
+      accepted
     };
   }
 
@@ -274,13 +261,12 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function reject(rejectionReason: string): IconMatch {
+function reject(): IconMatch {
   return {
     abilityId: "",
     score: 0,
     margin: 0,
-    accepted: false,
-    rejectionReason
+    accepted: false
   };
 }
 

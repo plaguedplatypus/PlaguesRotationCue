@@ -1,4 +1,5 @@
 import { abilityById } from "../data/abilityData";
+import { cueNoteMaxChars, isAbility, isCueNote, type Step } from "./steps";
 import type { Rotation, Category } from "../types";
 
 const rotationsTag = "rotation-cue.rotations.v1";
@@ -9,18 +10,31 @@ const collapsedTag = "rotation-cue.collapsed-rotations.v1";
 export const categories: Category[] = ["melee", "magic", "ranged", "necro", "hybrid"];
 
 export const sampleRotation: Rotation = {
-  id: "sample-necro",
-  name: "Sample Necromancy Rotation",
-  category: "necro",
-  steps: [
-    { abilityId: "death_skulls" },
-    { abilityId: "touch_of_death" },
-    { abilityId: "soul_sap" },
-    { abilityId: "finger_of_death" },
-    { abilityId: "volley_of_souls" },
-    { abilityId: "living_death" },
-    { abilityId: "threads_of_fate" },
-    { abilityId: "split_soul" }
+  "id": "sample-necro",
+  "name": "Sample Necromancy Rotation",
+  "category": "necro",
+  "once": [
+    { "type": "cue-note", "text": "Pre-Build at War's Retreat" },
+    { "abilityId": "invoke_death" },
+    { "abilityId": "conjure_undead_army" },
+    { "abilityId": "life_transfer" },
+    { "abilityId": "command_vengeful_ghost" },
+    { "abilityId": "split_soul" },
+    { "abilityId": "command_skeleton_warrior" },
+    { "type": "note", "text": "Pre-Build Rotation" }
+  ],
+  "steps": [
+    { "abilityId": "death_skulls" },
+    { "abilityId": "touch_of_death" },
+    { "abilityId": "soul_sap" },
+    { "abilityId": "finger_of_death" },
+    { "abilityId": "volley_of_souls" },
+    { "abilityId": "living_death" },
+    { "abilityId": "threads_of_fate" },
+    { "abilityId": "split_soul" },
+    { "abilityId": "bloat" },
+    { "type": "cue-note", "text": "Move to -A Spot-" },
+    { "abilityId": "marker_move" }
   ]
 };
 
@@ -32,11 +46,21 @@ function freshSample(): Rotation {
 }
 
 type StoredRotations = {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   rotations: Rotation[];
 };
 
-type LegacyRotation = Omit<Rotation, "category"> & { category?: unknown };
+type LegacyRotation = Omit<Rotation, "category" | "once"> & {
+  category?: unknown;
+  once?: Step[];
+};
+
+function isStep(value: unknown): value is Step {
+  if (!value || typeof value !== "object") return false;
+  const step = value as { abilityId?: unknown; type?: unknown; text?: unknown };
+  return typeof step.abilityId === "string"
+    || ((step.type === "cue-note" || step.type === "note") && typeof step.text === "string");
+}
 
 function isRotation(value: unknown): value is LegacyRotation {
   if (!value || typeof value !== "object") return false;
@@ -44,9 +68,8 @@ function isRotation(value: unknown): value is LegacyRotation {
   return typeof rotation.id === "string" &&
     typeof rotation.name === "string" &&
     Array.isArray(rotation.steps) &&
-    rotation.steps.every((step) =>
-      !!step && typeof step === "object" && typeof step.abilityId === "string"
-    );
+    rotation.steps.every(isStep) &&
+    (rotation.once === undefined || (Array.isArray(rotation.once) && rotation.once.every(isStep)));
 }
 
 function isCategory(value: unknown): value is Category {
@@ -56,7 +79,11 @@ function isCategory(value: unknown): value is Category {
 function inferCategory(rotation: LegacyRotation): Category {
   if (isCategory(rotation.category)) return rotation.category;
   // Version 1 saves had no category; a single-style rotation can recover it.
-  const styles = new Set(rotation.steps.map((step) => abilityById.get(step.abilityId)?.style).filter(Boolean));
+  const content = [...(rotation.once ?? []), ...rotation.steps];
+  const styles = new Set(content
+    .filter(isAbility)
+    .map((step) => abilityById.get(step.abilityId)?.style)
+    .filter(Boolean));
   if (styles.size !== 1) return "hybrid";
   const [style] = styles;
   if (style === "Melee") return "melee";
@@ -71,7 +98,16 @@ function normalize(rotation: LegacyRotation): Rotation {
     id: rotation.id,
     name: rotation.name,
     category: inferCategory(rotation),
-    steps: rotation.steps.map((step) => ({ abilityId: step.abilityId }))
+    ...(rotation.once === undefined ? {} : { once: rotation.once.map(normalizeStep) }),
+    steps: rotation.steps.map(normalizeStep)
+  };
+}
+
+function normalizeStep(step: Step): Step {
+  if (isAbility(step)) return { abilityId: step.abilityId };
+  return {
+    type: isCueNote(step) ? "cue-note" : "note",
+    text: step.text.slice(0, isCueNote(step) ? cueNoteMaxChars : 500)
   };
 }
 
@@ -90,7 +126,7 @@ export function loadRotations(): Rotation[] {
 }
 
 export function saveRotations(rotations: Rotation[]): void {
-  const stored: StoredRotations = { version: 2, rotations };
+  const stored: StoredRotations = { version: 3, rotations };
   localStorage.setItem(rotationsTag, JSON.stringify(stored));
 }
 

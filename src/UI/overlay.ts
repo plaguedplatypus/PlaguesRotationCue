@@ -1,12 +1,16 @@
 import { encodeImageString } from "alt1/base";
 import { entryById } from "../data/abilityData";
-import type { Cue, Point } from "../types";
+import type { Cue } from "../rotation/steps";
+import type { Point } from "../types";
 import { cueLabels, type Keybinds } from "./keybind";
 
 const groupName = "rotation-cue-strip";
 const cueCount = 4;
 const overlayLifetimeMs = 20_000;
 const overlayRefreshMs = 10_000;
+const cueNoteFontPx = 16;
+const cueNoteLineHeight = 15;
+const cueNoteMaxWidth = 280;
 
 export function isAlt1Available(): boolean {
   return typeof window.alt1 !== "undefined";
@@ -28,6 +32,8 @@ export class CueOverlay {
   private currentCooldown: { abilityId: string; seconds: number } | null = null;
   private previewing = false;
 
+  // *** Drawing entry points
+
   async draw(cues: Cue[]): Promise<void> {
     await this.drawAt(cues, this.position, false);
   }
@@ -41,6 +47,8 @@ export class CueOverlay {
       this.previewing = false;
     }
   }
+
+  // *** Display settings
 
   setPosition(position: Point | null): void {
     if (this.position?.x === position?.x && this.position?.y === position?.y) return;
@@ -125,6 +133,8 @@ export class CueOverlay {
     return true;
   }
 
+  // *** Overlay drawing
+
   private async drawAt(cues: Cue[], position: Point | null, placementPreview: boolean): Promise<void> {
     if (!isAlt1Available()) return;
     if (!cues.length && !placementPreview) {
@@ -139,7 +149,8 @@ export class CueOverlay {
     const cooldownSignature = this.currentCooldown
       ? `${this.currentCooldown.abilityId}:${this.currentCooldown.seconds}`
       : "ready";
-    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}`;
+    const noteSignature = cues.find((cue) => cue.offset === 0)?.notes.join("|") ?? "";
+    const signature = `${cues.map((cue) => `${cue.step.abilityId}:${cue.stepIndex}`).join("|")}@${positionSignature}:${this.scale}:${this.borderThickness}:${this.borderColor}:${this.opacity}:${this.showNames}:${this.showNextLabel}:${visualSequence}:${cooldownSignature}:${noteSignature}`;
     if (!placementPreview && signature === this.lastSignature
       && Date.now() - this.lastDrawAt < overlayRefreshMs) return;
 
@@ -166,13 +177,24 @@ export class CueOverlay {
       ? cues.length * tileWidth + (cues.length - 1) * gap
       : tileWidth * cueCount + (cueCount - 1) * gap;
     const logicalWidth = cueStripWidth + visualGutter * 2;
-    const logicalHeight = tileHeight;
-    canvas.width = Math.max(1, Math.round(logicalWidth * this.scale));
-    canvas.height = Math.max(1, Math.round(logicalHeight * this.scale));
+    const cueWidth = Math.max(1, Math.round(logicalWidth * this.scale));
+    const cueHeight = Math.max(1, Math.round(tileHeight * this.scale));
+    const noteText = currentCue?.notes.join(" • ") ?? "";
+    const noteWrapWidth = cueNoteMaxWidth;
+    const noteLines = measuringContext && noteText
+      ? wrapText(measuringContext, noteText, noteWrapWidth, 2)
+      : [];
+    const noteWidth = noteLines.length ? cueNoteMaxWidth + 8 : 0;
+    const noteHeight = noteLines.length ? noteLines.length * cueNoteLineHeight + 4 : 0;
+    canvas.width = Math.max(cueWidth, noteWidth);
+    canvas.height = cueHeight + noteHeight;
+    const cueOffsetX = (canvas.width - cueWidth) / 2;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return;
 
     context.clearRect(0, 0, canvas.width, canvas.height);
+    context.save();
+    context.translate(cueOffsetX, 0);
     context.scale(this.scale, this.scale);
     const icons = await Promise.all(cues.map((cue) => {
       const icon = entryById.get(cue.step.abilityId)?.icon;
@@ -237,7 +259,7 @@ export class CueOverlay {
 
       if (this.showNames) {
         context.fillStyle = "#f2f5f7";
-        context.font = "9px Arial";
+        context.font = "10px Arial";
         const label = this.fitLabel(context, ability?.name ?? cue.step.abilityId, tileWidth - 6);
         const nameWidth = Math.min(tileWidth, Math.ceil(context.measureText(label).width) + 6);
         const nameX = x + Math.round((tileWidth - nameWidth) / 2);
@@ -250,10 +272,10 @@ export class CueOverlay {
 
     if (!cues.length) {
       context.fillStyle = "rgba(13, 17, 23, 0.92)";
-      context.fillRect(0, 0, logicalWidth, logicalHeight);
+      context.fillRect(0, 0, logicalWidth, tileHeight);
       context.strokeStyle = "#f2c94c";
       context.lineWidth = 2;
-      context.strokeRect(1, 1, logicalWidth - 2, logicalHeight - 2);
+      context.strokeRect(1, 1, logicalWidth - 2, tileHeight - 2);
       context.fillStyle = "#f2c94c";
       context.font = "bold 14px Arial";
       context.textAlign = "center";
@@ -261,6 +283,22 @@ export class CueOverlay {
       context.fillStyle = "#f2f5f7";
       context.font = "11px Arial";
       context.fillText("Overlay position preview", logicalWidth / 2, 61);
+    }
+    context.restore();
+
+    if (noteLines.length) {
+      context.font = `bold ${cueNoteFontPx}px Arial`;
+      context.textAlign = "center";
+      context.textBaseline = "alphabetic";
+      context.lineJoin = "round";
+      context.lineWidth = 4;
+      context.strokeStyle = "rgba(0, 0, 0, 0.96)";
+      context.fillStyle = "#fff2c8";
+      noteLines.forEach((line, index) => {
+        const y = cueHeight + cueNoteFontPx + index * cueNoteLineHeight;
+        context.strokeText(line, canvas.width / 2, y);
+        context.fillText(line, canvas.width / 2, y);
+      });
     }
 
     try {
@@ -282,7 +320,8 @@ export class CueOverlay {
           cueFrameY + frameInset,
           cueIconSize,
           cueIconSize,
-          this.scale
+          this.scale,
+          cueOffsetX
         );
       });
       applyOpacity(imageData, this.opacity, iconRegions);
@@ -295,12 +334,16 @@ export class CueOverlay {
         const frameX = visualGutter + currentIndex * (tileWidth + gap)
           + Math.round((tileWidth - currentFrameSize) / 2);
         const currentFrameY = frameY + frameSize - currentFrameSize;
+        context.save();
+        context.translate(cueOffsetX, 0);
+        context.scale(this.scale, this.scale);
         drawCooldown(
           context,
           frameX + frameInset + currentIconSize / 2,
           currentFrameY + frameInset + currentIconSize / 2,
           String(this.currentCooldown.seconds)
         );
+        context.restore();
       }
       const encoded = encodeImageString(context.getImageData(0, 0, canvas.width, canvas.height));
       const rsWidth = Number(alt1.rsWidth);
@@ -310,7 +353,7 @@ export class CueOverlay {
         ? clampCoord(Math.round(position.x - canvas.width / 2), rsWidth - canvas.width)
         : defaultX;
       const y = position
-        ? clampCoord(Math.round(position.y - canvas.height / 2), rsHeight - canvas.height)
+        ? clampCoord(Math.round(position.y - cueHeight / 2), rsHeight - canvas.height)
         : 72;
       alt1.overLayImage(x, y, encoded, canvas.width, placementPreview ? 700 : overlayLifetimeMs);
       if (canContinue) alt1.overLayContinueGroup(groupName);
@@ -359,6 +402,8 @@ export class CueOverlay {
   }
 }
 
+// *** Cue geometry
+
 function clampCoord(value: number, maximum: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(maximum)) return 0;
   return Math.max(0, Math.min(value, Math.max(0, maximum)));
@@ -385,6 +430,8 @@ function drawArrow(context: CanvasRenderingContext2D, centerX: number, centerY: 
   context.stroke();
   context.restore();
 }
+
+// *** Cue labels and cooldown
 
 function measureLabels(context: CanvasRenderingContext2D, keybinds: string[]): number {
   if (!keybinds.length) return 0;
@@ -456,6 +503,39 @@ function drawCooldown(
   context.restore();
 }
 
+// *** Cue Note text
+
+function wrapText(
+  context: CanvasRenderingContext2D,
+  value: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  context.font = `bold ${cueNoteFontPx}px Arial`;
+  let remaining = value.trim().replace(/\s+/g, " ");
+  const lines: string[] = [];
+
+  while (remaining && lines.length < maxLines) {
+    let end = remaining.length;
+    while (end > 1 && context.measureText(remaining.slice(0, end)).width > maxWidth) end -= 1;
+    if (end < remaining.length) {
+      const wordEnd = remaining.lastIndexOf(" ", end);
+      if (wordEnd > 0) end = wordEnd;
+    }
+    let line = remaining.slice(0, end).trim();
+    remaining = remaining.slice(end).trim();
+    if (lines.length === maxLines - 1 && remaining) {
+      while (line && context.measureText(`${line}…`).width > maxWidth) line = line.slice(0, -1).trimEnd();
+      line = `${line}…`;
+      remaining = "";
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+// *** Icon opacity
+
 const opacityPattern = [
    0, 32,  8, 40,  2, 34, 10, 42,
   48, 16, 56, 24, 50, 18, 58, 26,
@@ -469,11 +549,18 @@ const opacityPattern = [
 
 type Region = { left: number; top: number; right: number; bottom: number };
 
-function scaleRegion(x: number, y: number, width: number, height: number, scale: number): Region {
+function scaleRegion(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  scale: number,
+  offsetX = 0
+): Region {
   return {
-    left: Math.floor(x * scale),
+    left: Math.floor(offsetX + x * scale),
     top: Math.floor(y * scale),
-    right: Math.ceil((x + width) * scale),
+    right: Math.ceil(offsetX + (x + width) * scale),
     bottom: Math.ceil((y + height) * scale)
   };
 }

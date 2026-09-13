@@ -15,7 +15,6 @@ export interface Settings {
   overlayOpacity: number;
   showAbilityNames: boolean;
   showNextLabel: boolean;
-  showDiagnostics: boolean;
 }
 
 const defaults: Settings = {
@@ -29,9 +28,10 @@ const defaults: Settings = {
   cueBorderColor: "#f2c94c",
   overlayOpacity: 100,
   showAbilityNames: true,
-  showNextLabel: true,
-  showDiagnostics: false
+  showNextLabel: true
 };
+
+// *** Storage
 
 export function loadSettings(): Settings {
   try {
@@ -57,10 +57,7 @@ export function loadSettings(): Settings {
         : defaults.showAbilityNames,
       showNextLabel: typeof stored?.showNextLabel === "boolean"
         ? stored.showNextLabel
-        : defaults.showNextLabel,
-      showDiagnostics: typeof stored?.showDiagnostics === "boolean"
-        ? stored.showDiagnostics
-        : defaults.showDiagnostics
+        : defaults.showNextLabel
     };
     saveSettings(settings);
     return settings;
@@ -72,6 +69,8 @@ export function loadSettings(): Settings {
 export function saveSettings(settings: Settings): void {
   localStorage.setItem(storageId, JSON.stringify(settings));
 }
+
+// *** Settings modal
 
 export function modalMarkup(settings: Settings, positioning = false): string {
   return `
@@ -114,10 +113,6 @@ export function modalMarkup(settings: Settings, positioning = false): string {
             </div>
           `)}
 
-          ${sectionMarkup("Interface", `
-            ${toggleRow("Show Diagnostics", "settings-show-diagnostics", settings.showDiagnostics)}
-          `)}
-
           ${sectionMarkup("Keybind", `
             <div class="settings-keybind-list" aria-label="Cue keybinds">
               ${keybindRow("Next Cue", "Advance to the next rotation cue.", "Alt+1")}
@@ -140,6 +135,8 @@ export function modalMarkup(settings: Settings, positioning = false): string {
       </section>
     </div>`;
 }
+
+// *** Value normal
 
 function cleanPoint(value: unknown): Point | null {
   const point = value as Partial<Point> | null | undefined;
@@ -167,6 +164,8 @@ function cleanColor(value: unknown, fallback: string): string {
   const color = String(value ?? "").toLowerCase();
   return /^#[0-9a-f]{6}$/.test(color) ? color : fallback;
 }
+
+// *** Form controls
 
 export function bindRanges(container: ParentNode): void {
   container.querySelectorAll<HTMLInputElement>(".settings-range").forEach((input) => {
@@ -232,7 +231,7 @@ function colorRow(label: string, id: string, value: string): string {
 
 function keybindRow(label: string, description: string, keybind: string): string {
   return `
-    <div class="settings-keybind-row">
+    <div class="settings-row settings-keybind-row">
       <span class="settings-keybind-label"><strong>${label}</strong><small>${description}</small></span>
       <span class="settings-keybind" aria-label="${label}: ${keybind}">${keybind}</span>
     </div>`;

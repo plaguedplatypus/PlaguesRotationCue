@@ -25,7 +25,8 @@ module.exports = {
       patterns: [
         { from: "index.html", to: "index.html" },
         { from: "appconfig.json", to: "appconfig.json" },
-        { from: "assets", to: "assets" }
+        { from: "assets", to: "assets" },
+        { from: "screenshots", to: "screenshots" }
       ]
     })
   ],

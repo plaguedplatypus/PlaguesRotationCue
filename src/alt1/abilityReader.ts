@@ -1,5 +1,5 @@
 import * as a1lib from "alt1/base";
-import type { ScanResult, DetectedSlot, Observation, TrackingState } from "../types";
+import type { ScanResult, DetectedSlot, Observation } from "../types";
 import { abilityById, nextSequenceId, sequenceCooldown, sequenceFor } from "../data/abilityData";
 import { Matcher, type IconMatch } from "./iconMatcher";
 import { clearGeometry, Locator, showGeometry, type SlotLocation, type Slot } from "./actionBar";
@@ -38,16 +38,12 @@ export class Reader implements ReaderApi {
   private readonly locator = new Locator();
   private readonly slotById = new Map<string, SavedSlot>();
   private tracking: Tracking = freshTracking();
-  private useCount = 0;
+
+  // *** Action bar scan
 
   async scan({ showGeometry: showBars = true }: ScanOptions = {}): Promise<ScanResult> {
-    const startedAt = performance.now();
     if (!window.alt1) {
-      return emptyResult(
-        "unavailable",
-        "Open Rotation Cue inside Alt1 to scan the action bars.",
-        startedAt
-      );
+      return emptyResult();
     }
 
     try {
@@ -57,16 +53,12 @@ export class Reader implements ReaderApi {
       clearGeometry();
       const screen = a1lib.captureHoldFullRs();
       if (!screen) {
-        return emptyResult("error", "Game could not be captured.", startedAt);
+        return emptyResult();
       }
 
       const bars = await this.locator.find(screen);
       if (!bars.length) {
-        return emptyResult(
-          "available",
-          "No visible action bars were found.",
-          startedAt
-        );
+        return emptyResult();
       }
       if (showBars) showGeometry(bars);
 
@@ -91,10 +83,7 @@ export class Reader implements ReaderApi {
             slots.push({
               barIndex: barIndex + 1,
               slotIndex: slot.index + 1,
-              accepted: false,
-              confidence: 0,
-              margin: 0,
-              rejectionReason: "Bar capture failed"
+              accepted: false
             });
           }
           continue;
@@ -107,25 +96,19 @@ export class Reader implements ReaderApi {
             width: slot.width,
             height: slot.height
           };
-          let best: { match: IconMatch; capture: ImageData } | null = null;
+          let best: IconMatch | null = null;
           for (const capture of samples) {
             const match = await this.matcher.match(capture, rect);
-            if (!best || matchScore(match) > matchScore(best.match)) {
-              best = { match, capture };
+            if (!best || matchScore(match) > matchScore(best)) {
+              best = match;
             }
           }
-          const { match, capture } = best!;
+          const match = best!;
           const slotResult: DetectedSlot = {
             barIndex: barIndex + 1,
             slotIndex: slot.index + 1,
             accepted: match.accepted,
-            abilityId: match.abilityId || undefined,
-            confidence: match.score,
-            margin: match.margin,
-            empty: match.empty,
-            emptyScore: match.emptyScore,
-            rejectionReason: match.rejectionReason,
-              previewDataUrl: previewUrl(capture, rect)
+            abilityId: match.abilityId || undefined
           };
           slots.push(slotResult);
           if (match.accepted) {
@@ -148,38 +131,27 @@ export class Reader implements ReaderApi {
         }
       }
 
-      const durationMs = Math.round(performance.now() - startedAt);
-      const emptySlots = slots.filter((slot) => slot.empty).length;
       return {
-        availability: "available",
-        message: recognized
-          ? `Recognized ${recognized} of ${slots.length} visible slots.`
-          : `Found ${bars.length} action bar${bars.length === 1 ? "" : "s"}, but no icons met the acceptance threshold. Retry with the global cooldown clear; the slot previews below show exactly what was captured.`,
         barsFound: bars.length,
-        slotsFound: slots.length,
         recognized,
-        empty: emptySlots,
-        unknown: slots.length - recognized - emptySlots,
-        durationMs,
         slots
       };
     } catch (error) {
       console.warn("Action-bar scan failed", error);
-      return emptyResult("error", "Action-bar scanning failed. Try again with the bars unobstructed.", startedAt);
+      return emptyResult();
     }
   }
 
+  // *** Ability tracking
+
   async observeExpected(abilityId: string): Promise<Observation> {
-    const startedAt = performance.now();
     if (!window.alt1) {
-      return this.observation(abilityId, "unavailable", false, 0, 0, startedAt,
-        "Expected-ability tracking requires Alt1.");
+      return this.observation(abilityId, false);
     }
 
     const location = this.slotById.get(abilityId);
     if (!location) {
-      return this.observation(abilityId, "unavailable", false, 0, 0, startedAt,
-        "Expected ability was not found. Run a full discovery scan.");
+      return this.observation(abilityId, false);
     }
 
     if (this.tracking.abilityId !== abilityId) {
@@ -195,8 +167,7 @@ export class Reader implements ReaderApi {
     };
     const capture = a1lib.capture(area.x, area.y, area.width, area.height);
     if (!capture) {
-      return this.observation(abilityId, "unavailable", true, 0, 0, startedAt,
-        "Expected slot capture failed.");
+      return this.observation(abilityId, true);
     }
 
     const rect = { x: padding, y: padding, width: location.width, height: location.height };
@@ -208,8 +179,7 @@ export class Reader implements ReaderApi {
     );
     const measurement = measurements.find((measurement) => measurement.abilityId === abilityId);
     if (!measurement) {
-      return this.observation(abilityId, "unavailable", true, 0, 0, startedAt,
-        "Expected ability template is unavailable.");
+      return this.observation(abilityId, true);
     }
     const nextMeasurement = nextAbilityId
       ? measurements.find((measurement) => measurement.abilityId === nextAbilityId)
@@ -267,9 +237,6 @@ export class Reader implements ReaderApi {
         && cooldown.reliable !== false
         && rolloverThreshold !== undefined
         && seconds >= rolloverThreshold) {
-        if (this.tracking.rolloverFrames === 0) {
-          this.tracking.cooldownAt = performance.now();
-        }
         this.tracking.rolloverFrames++;
         const framesNeeded = maxCooldown! <= 6 ? 1 : 2;
         rolloverUse = this.tracking.rolloverFrames >= framesNeeded;
@@ -330,61 +297,32 @@ export class Reader implements ReaderApi {
       // Moving abilities while a rotation active can cause a rotation to fail and stop completely.
       this.slotById.delete(abilityId);
       this.tracking = freshTracking();
-      return this.observation(abilityId, "identity-lost", false, measurement.similarity,
-        measurement.brightness, startedAt, "Slot identity was lost. Run a full discovery scan.");
+      return this.observation(abilityId, false, true);
     }
 
-    let state: TrackingState = "acquiring-baseline";
-    let message = "Waiting for a clear ready baseline.";
     let used = false;
-    let gcdTransient = false;
-    let latencyMs: number | undefined;
 
     if (useSignal) {
       this.tracking.gcdFrames = 0;
       this.tracking.readyFrames = 0;
-      if (this.tracking.cooldownFrames === 0) this.tracking.cooldownAt = performance.now();
       this.tracking.cooldownFrames++;
-      state = "cooldown-like";
 
       if ((this.tracking.armed
         && (this.tracking.cooldownFrames >= 2 || sequenceConfirmed))
         || rolloverUse) {
         used = true;
-        this.useCount++;
-        latencyMs = Math.round(performance.now() - this.tracking.cooldownAt);
-        this.tracking.lastLatency = latencyMs;
         this.tracking.armed = false;
         this.tracking.emitted = true;
         this.tracking.nearClearFrames = 0;
         this.tracking.rolloverPrimed = false;
         this.tracking.rolloverFrames = 0;
         this.tracking.sequenceFrames = 0;
-        message = sequenceConfirmed && nextAbilityId
-          ? `Use detected from action-bar sequence advancing to ${abilityById.get(nextAbilityId)!.name}.`
-          : rolloverUse
-          ? "Use detected from a confirmed cooldown reset."
-          : visualConfirmed
-            ? "Use detected from persistent slot cooldown visuals."
-            : "Use detected from persistent cooldown text.";
-      } else if (this.tracking.emitted) {
-        message = "Cooldown remains visible; detector is disarmed.";
-      } else if (!this.tracking.armed) {
-        message = "Existing cooldown detected; waiting for the slot to become ready.";
-      } else {
-        message = "Confirming cooldown on the next observation.";
       }
     } else {
       this.tracking.cooldownFrames = 0;
-      this.tracking.cooldownAt = 0;
       if (gcdDarkening) {
         this.tracking.gcdFrames++;
         this.tracking.readyFrames = 0;
-        gcdTransient = this.tracking.gcdFrames <= gcdMaxFrames;
-        state = "transient";
-        message = gcdTransient
-          ? `GCD-like darkening at ${Math.round(brightnessRatio * 100)}% of ready brightness; ignored.`
-          : "Brightness has remained low too long to classify as a GCD; waiting for cooldown text or recovery.";
       } else if (matched) {
         this.tracking.gcdFrames = 0;
         const brightnessReady = !this.tracking.baseline
@@ -398,24 +336,9 @@ export class Reader implements ReaderApi {
         if (this.tracking.readyFrames >= framesNeeded) {
           this.tracking.armed = true;
           this.tracking.emitted = false;
-          state = "armed";
-          message = this.tracking.baseline
-            ? "Ready state confirmed; waiting for use."
-            : "Ready state confirmed; brightness baseline is still calibrating.";
-        } else if (!brightnessReady) {
-          state = "transient";
-          message = "The icon has not returned to its ready brightness; no event can fire.";
-        } else if (this.tracking.emitted) {
-          state = "transient";
-          message = `Confirming cooldown recovery (${this.tracking.readyFrames}/${framesNeeded}).`;
-        } else if (this.tracking.armed) {
-          state = "transient";
-          message = `Confirming GCD recovery (${this.tracking.readyFrames}/${framesNeeded}).`;
         }
-        if (!this.tracking.baseline && !this.tracking.armed) {
-          state = "acquiring-baseline";
-          message = `Confirming ready state (${this.tracking.readyFrames}/${framesNeeded}); brightness calibration ${this.tracking.readySamples.length}/${baselineSamples}.`;
-        } else if (!this.tracking.emitted && brightnessReady && !gcdDarkening
+        if ((this.tracking.baseline > 0 || this.tracking.armed)
+          && !this.tracking.emitted && brightnessReady && !gcdDarkening
           && measurement.brightness <= this.tracking.baseline * 1.25) {
           addBrightness(this.tracking, measurement.brightness, 7);
           const midpoint = median(this.tracking.readySamples);
@@ -423,30 +346,19 @@ export class Reader implements ReaderApi {
         }
       } else {
         this.tracking.readyFrames = 0;
-        state = "transient";
-        message = "Icon changed without cooldown evidence; ignoring transient state.";
       }
     }
 
     return {
       abilityId,
       slotFound: true,
-      state,
-      armed: this.tracking.armed,
-      similarity: measurement.similarity,
-      brightness: measurement.brightness,
-      brightnessRatio,
-      gcdTransient,
-      cooldownText: cooldown.rawText || undefined,
+      identityLost: false,
       cooldown: cooldownValue,
-      cooldownFrames: this.tracking.cooldownFrames,
-      sampleMs: Math.round((performance.now() - startedAt) * 10) / 10,
-      used,
-      useCount: this.useCount,
-      latencyMs: latencyMs ?? this.tracking.lastLatency,
-      message
+      used
     };
   }
+
+  // *** Reader state
 
   resetTracking(): void {
     this.tracking = freshTracking();
@@ -464,30 +376,19 @@ export class Reader implements ReaderApi {
 
   private observation(
     abilityId: string,
-    state: TrackingState,
     slotFound: boolean,
-    similarity: number,
-    brightness: number,
-    startedAt: number,
-    message: string
+    identityLost = false
   ): Observation {
     return {
       abilityId,
       slotFound,
-      state,
-      armed: this.tracking.armed,
-      similarity,
-      brightness,
-      brightnessRatio: undefined,
-      gcdTransient: false,
-      cooldownFrames: 0,
-      sampleMs: Math.round((performance.now() - startedAt) * 10) / 10,
-      used: false,
-      useCount: this.useCount,
-      message
+      identityLost,
+      used: false
     };
   }
 }
+
+// *** Tracking state
 
 type SavedSlot = {
   x: number;
@@ -511,11 +412,9 @@ type Tracking = {
   sequenceFrames: number;
   lastCooldown?: number;
   cooldownFloor: number;
-  cooldownAt: number;
   lowIdentity: number;
   baseline: number;
   readySamples: number[];
-  lastLatency?: number;
 };
 
 function freshTracking(abilityId = ""): Tracking {
@@ -533,11 +432,9 @@ function freshTracking(abilityId = ""): Tracking {
     sequenceFrames: 0,
     lastCooldown: undefined,
     cooldownFloor: 0,
-    cooldownAt: 0,
     lowIdentity: 0,
     baseline: 0,
-    readySamples: [],
-    lastLatency: undefined
+    readySamples: []
   };
 }
 
@@ -552,6 +449,8 @@ function median(values: readonly number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+// *** Scan helpers
+
 function captureArea(slots: Slot[]): { x: number; y: number; width: number; height: number } {
   const x = Math.max(0, Math.floor(Math.min(...slots.map((slot) => slot.x)) - 2));
   const y = Math.max(0, Math.floor(Math.min(...slots.map((slot) => slot.y)) - 2));
@@ -560,40 +459,16 @@ function captureArea(slots: Slot[]): { x: number; y: number; width: number; heig
   return { x, y, width: right - x, height: bottom - y };
 }
 
-function emptyResult(
-  availability: ScanResult["availability"],
-  message: string,
-  startedAt: number
-): ScanResult {
+function emptyResult(): ScanResult {
   return {
-    availability,
-    message,
     barsFound: 0,
-    slotsFound: 0,
     recognized: 0,
-    empty: 0,
-    unknown: 0,
-    durationMs: Math.round(performance.now() - startedAt),
     slots: []
   };
 }
 
 function matchScore(match: IconMatch): number {
   return (match.accepted ? 2 : 0) + match.score + match.margin * 0.5;
-}
-
-function previewUrl(image: ImageData, rect: { x: number; y: number; width: number; height: number }): string | undefined {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    const context = canvas.getContext("2d");
-    if (!context) return undefined;
-    context.putImageData(image, -rect.x, -rect.y);
-    return canvas.toDataURL("image/png");
-  } catch {
-    return undefined;
-  }
 }
 
 function pause(ms: number): Promise<void> {

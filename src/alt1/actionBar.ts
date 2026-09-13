@@ -102,6 +102,8 @@ const layouts: readonly Layout[] = [
 
 type Anchors = { cog: ImageData; control: ImageData; adrenaline: ImageData[] };
 
+// *** Action bar location
+
 export class Locator {
   private anchorLoad: Promise<Anchors> | null = null;
 
@@ -165,6 +167,8 @@ export class Locator {
   }
 }
 
+// *** Geometry overlay
+
 export function clearGeometry(): void {
   const api = window.alt1;
   if (!api) return;
@@ -173,7 +177,7 @@ export function clearGeometry(): void {
   api.overLayRefreshGroup("rotation-cue-action-bars");
 }
 
-export function showGeometry(bars: readonly Bar[], durationMs = 12000): void {
+export function showGeometry(bars: readonly Bar[], durationMs = 6000): void {
   const api = window.alt1;
   if (!api) return;
   const mainColor = a1lib.mixColor(54, 220, 255);
@@ -189,13 +193,16 @@ export function showGeometry(bars: readonly Bar[], durationMs = 12000): void {
       api.overLayText(String(slot.index + 1).padStart(2, "0"), color, 8,
         slot.x + 2, slot.y + 10, durationMs);
     });
+    //bar names and config displayed after scan
     const label = bar.kind === "main"
       ? `Main (${bar.layout})`
-      : `Secondary ${++secondary} (${bar.layout})`;
+      : ` ${++secondary} (${bar.layout})`;
     api.overLayText(label, color, 12, bar.x, Math.max(0, bar.y - 7), durationMs);
   });
   api.overLayRefreshGroup("rotation-cue-action-bars");
 }
+
+// *** Current slot overlay
 
 const cueGroup = "rotation-cue-current-action-bar-slot";
 const cueLifetimeMs = 20_000;
@@ -267,6 +274,8 @@ function overlayColor(value: string): number {
     Number.parseInt(value.slice(5, 7), 16)
   );
 }
+
+// *** Layout matching
 
 function getSlots(x: number, y: number, layout: Layout, placement: Placement): Slot[] {
   const slots: Slot[] = [];

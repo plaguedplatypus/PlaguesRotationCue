@@ -1,4 +1,4 @@
-import { latestRelease, releases } from "./updateNotes";
+import { latestRelease, releases, type ReleaseNote, type ReleaseSection } from "./updateNotes";
 
 const seenReleaseStorageId = "rotation-cue.update-toast-seen-id";
 
@@ -20,7 +20,7 @@ function markSeen(releaseId: string): void {
 
 export function maybeShowToast(): void {
   const latest = latestRelease();
-  if (!latest?.version || !latest.items.length || getSeenId() === latest.version) return;
+  if (!latest?.version || !hasContent(latest) || getSeenId() === latest.version) return;
 
   document.querySelector(".update-toast-backdrop")?.remove();
   const backdrop = document.createElement("div");
@@ -33,14 +33,6 @@ export function maybeShowToast(): void {
   title.className = "update-toast-title";
   title.textContent = `Update ${latest.version}`;
 
-  const list = document.createElement("ul");
-  list.className = "update-toast-list";
-  for (const note of latest.items) {
-    const item = document.createElement("li");
-    item.textContent = note;
-    list.appendChild(item);
-  }
-
   const close = document.createElement("button");
   close.className = "update-toast-close";
   close.type = "button";
@@ -50,7 +42,9 @@ export function maybeShowToast(): void {
     backdrop.remove();
   });
 
-  toast.append(title, list, close);
+  toast.append(title);
+  appendContent(toast, latest, "update-toast-list");
+  toast.append(close);
   backdrop.appendChild(toast);
   document.body.appendChild(backdrop);
 }
@@ -105,14 +99,7 @@ export function showPatchNotes(): void {
       entry.appendChild(entryTitle);
     }
 
-    const list = document.createElement("ul");
-    list.className = "patch-notes-list";
-    for (const itemText of note.items) {
-      const item = document.createElement("li");
-      item.textContent = itemText;
-      list.appendChild(item);
-    }
-    entry.appendChild(list);
+    appendContent(entry, note, "patch-notes-list");
     content.appendChild(entry);
   }
 
@@ -120,4 +107,41 @@ export function showPatchNotes(): void {
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
   close.focus();
+}
+
+function hasContent(note: ReleaseNote): boolean {
+  return sections(note).some((section) => section.items.length > 0 || !!section.image);
+}
+
+function appendContent(container: HTMLElement, note: ReleaseNote, listClass: string): void {
+  for (const releaseSection of sections(note)) {
+    const section = document.createElement("div");
+    section.className = "update-note-section";
+    if (releaseSection.items.length) {
+      const list = document.createElement("ul");
+      list.className = listClass;
+      for (const text of releaseSection.items) {
+        const item = document.createElement("li");
+        item.textContent = text;
+        list.appendChild(item);
+      }
+      section.appendChild(list);
+    }
+    if (releaseSection.image) {
+      section.appendChild(releaseImage(releaseSection.image.src, releaseSection.image.alt));
+    }
+    container.appendChild(section);
+  }
+}
+
+function sections(note: ReleaseNote): ReleaseSection[] {
+  return note.sections ?? [{ items: note.items ?? [] }];
+}
+
+function releaseImage(src: string, alt: string): HTMLImageElement {
+  const image = document.createElement("img");
+  image.className = "update-note-image";
+  image.src = src;
+  image.alt = alt;
+  return image;
 }

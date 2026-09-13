@@ -10,7 +10,6 @@ export interface SlotRect {
 }
 
 export interface OcrResult {
-  rawText: string;
   seconds?: number;
   reliable?: boolean;
 }
@@ -34,7 +33,6 @@ type ParsedText = {
 };
 
 type Option = {
-  rawText: string;
   seconds: number;
   reliable: boolean;
   score: number;
@@ -72,13 +70,14 @@ const weakLookalikes: Record<string, string> = {
   t: "7", T: "7"
 };
 
+// *** Cooldown reading
+
 export function readCooldown(
   capture: ImageData,
   rect: SlotRect,
   options: OcrOptions = {}
 ): OcrResult {
   const matches: Option[] = [];
-  let rejected = "";
 
   const consider = (
     rawText: string,
@@ -86,7 +85,6 @@ export function readCooldown(
     preference: number
   ): void => {
     const raw = String(rawText || "").trim();
-    if (raw.length > rejected.length) rejected = raw;
 
     const normalized = normalize(raw);
     const seconds = normalized.valid ? parseText(normalized.text) : undefined;
@@ -95,7 +93,6 @@ export function readCooldown(
       : maxSeconds;
     if (seconds !== undefined && seconds <= limit) {
       matches.push({
-        rawText: raw,
         seconds,
         reliable: source === "digits"
           || (normalized.hasRealDigit && normalized.substitutions === 0),
@@ -156,9 +153,11 @@ export function readCooldown(
   matches.sort((left, right) => right.score - left.score);
   const best = matches[0];
   return best
-    ? { rawText: best.rawText, seconds: best.seconds, reliable: best.reliable }
-    : { rawText: rejected };
+    ? { seconds: best.seconds, reliable: best.reliable }
+    : {};
 }
+
+// *** Text parsing
 
 export function parseText(text: string): number | undefined {
   const clock = text.match(/^(\d{1,2}):(\d{2})$/);
@@ -279,6 +278,8 @@ function invalid(text = ""): ParsedText {
     specialSubs: 0
   };
 }
+
+// *** OCR helpers
 
 function score(
   normalized: ParsedText,

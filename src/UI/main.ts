@@ -4,8 +4,7 @@ import { Reader } from "../alt1/abilityReader";
 import { abilityById } from "../data/abilityData";
 import { Engine } from "../rotation/engine";
 import type { State } from "../state";
-import type { ScanResult, Observation, Point } from "../types";
-import { bodyMarkup, panelMarkup, statusText } from "./diagnostics";
+import type { ScanResult, Point } from "../types";
 import { renderEditor } from "./editor";
 import { bindFields, loadKeybinds, saveKeybinds, modalMarkup as keybindModal } from "./keybind";
 import { CueOverlay, isAlt1Available } from "./overlay";
@@ -14,7 +13,6 @@ import { showPatchNotes } from "../updates/updateToast";
 
 const pollMs = 250;
 const keepaliveMs = 5_000;
-const diagnosticsMs = 500;
 const retryMs = 30_000;
 const messageMs = 4_000;
 
@@ -30,13 +28,11 @@ export function mountApp(root: HTMLElement, state: State): void {
   let polling = false;
   let pollTimer: number | null = null;
   let retryTimer: number | null = null;
-  let observation: Observation | null = null;
-  let lastDiagnosticsAt = 0;
-  let diagnosticsOpen = false;
   let settingsOpen = false;
   let keybindsOpen = false;
   let keybindBar = 1;
   let settingsScroll = 0;
+  let renderedCategory = state.category;
   let settings = loadSettings();
   let keybinds = loadKeybinds();
   let placingOverlay = false;
@@ -58,17 +54,23 @@ export function mountApp(root: HTMLElement, state: State): void {
   const upcoming = (count: number) => engine.upcomingSteps(count, settings.loopRotationAtEnd);
 
   const updateMsg = (): void => {
-    const Msg = root.querySelector<HTMLElement>(".app-footer");
-    const text = Msg?.querySelector<HTMLElement>("span");
-    if (!Msg || !text) return;
-    Msg.classList.toggle("has-message", !!message);
-    text.textContent = message || (state.active
-      ? `Active: ${state.active.name}`
-      : "No active rotation");
+    const current = root.querySelector<HTMLElement>(".app-message");
+    if (!message) {
+      current?.remove();
+      return;
+    }
+    if (current) {
+      current.textContent = message;
+      return;
+    }
+    const next = document.createElement("div");
+    next.className = "app-message";
+    next.textContent = message;
+    root.appendChild(next);
   };
 
-  const showMessage = (message: string): void => {
-    message;
+  const showMessage = (value: string): void => {
+    message = value;
     if (msgTimer !== null) window.clearTimeout(msgTimer);
     updateMsg();
     msgTimer = window.setTimeout(() => {
@@ -77,6 +79,8 @@ export function mountApp(root: HTMLElement, state: State): void {
       updateMsg();
     }, messageMs);
   };
+
+  // *** Overlay and tracking
 
   const drawSlot = (): void => {
     const abilityId = engine.currentStep()?.abilityId;
@@ -96,7 +100,6 @@ export function mountApp(root: HTMLElement, state: State): void {
 
   const resetTracking = (): void => {
     reader.resetTracking();
-    observation = null;
     cueOverlay.setCooldown(null);
   };
 
@@ -120,45 +123,6 @@ export function mountApp(root: HTMLElement, state: State): void {
     }, delay);
   };
 
-  function bindDiagnostics(scope: ParentNode): void {
-    scope.querySelector("#scan-action-bars")?.addEventListener("click", () => { void scanBars(); });
-    scope.querySelector("#toggle-tracking")?.addEventListener("click", () => {
-      if (tracking) {
-        stopTracking();
-        updateCue();
-      } else {
-        startTracking();
-      }
-    });
-  }
-
-  function refreshDiagnostics(force = false): void {
-    const status = root.querySelector<HTMLElement>(".diagnostics-panel summary small");
-    if (status) status.textContent = statusText({ trackingEnabled: tracking, alt1Available: isAlt1Available() });
-    if (!settings.showDiagnostics || !diagnosticsOpen || settingsOpen) return;
-    const now = Date.now();
-    if (!force && now - lastDiagnosticsAt < diagnosticsMs) return;
-    lastDiagnosticsAt = now;
-
-    const body = root.querySelector<HTMLElement>(".diagnostics-body");
-    if (!body) return;
-    const expectedId = engine.currentStep()?.abilityId;
-    const current = observation?.abilityId === expectedId
-      ? observation
-      : null;
-    body.innerHTML = bodyMarkup({
-      result: scanResult,
-      scanning,
-      expectedAbilityId: expectedId,
-      currentStepIndex: engine.currentIndex(),
-      rotationStepCount: engine.stepCount(),
-      trackingEnabled: tracking,
-      observation: current,
-      alt1Available: isAlt1Available()
-    });
-    bindDiagnostics(body);
-  }
-
   function refreshScan(): void {
     root.querySelectorAll<HTMLButtonElement>(".rotation-scan-button").forEach((button) => {
       button.disabled = !isAlt1Available() || scanning;
@@ -169,8 +133,9 @@ export function mountApp(root: HTMLElement, state: State): void {
       keybindScan.disabled = !isAlt1Available() || scanning;
       keybindScan.textContent = scanning ? "Scanning…" : "Scan Bars";
     }
-    refreshDiagnostics(true);
   }
+
+  // *** Cue tracking
 
   function updateCue(): void {
     const currentIndex = engine.currentIndex();
@@ -185,18 +150,10 @@ export function mountApp(root: HTMLElement, state: State): void {
       void cueOverlay.draw(upcoming(settings.upcomingAbilities));
     }
     drawSlot();
-    refreshDiagnostics(true);
   }
 
   function advance(): boolean {
-    const stepCount = engine.stepCount();
-    if (!stepCount) return false;
-    if (engine.currentIndex() >= stepCount - 1) {
-      if (!settings.loopRotationAtEnd) return false;
-      engine.reset();
-      return true;
-    }
-    return engine.next(false);
+    return engine.next(settings.loopRotationAtEnd);
   }
 
   const poll = async (): Promise<void> => {
@@ -206,7 +163,6 @@ export function mountApp(root: HTMLElement, state: State): void {
       tracking = false;
       if (pollTimer !== null) window.clearInterval(pollTimer);
       pollTimer = null;
-      observation = null;
       updateCue();
       return;
     }
@@ -218,12 +174,11 @@ export function mountApp(root: HTMLElement, state: State): void {
     let cooldownChanged = false;
     try {
       const sample = await reader.observeExpected(abilityId);
-      observation = sample;
       cooldownChanged = cueOverlay.setCooldown(
         sample.cooldown !== undefined ? sample.abilityId : null,
         sample.cooldown
       );
-      if (sample.state === "identity-lost" || !sample.slotFound) {
+      if (sample.identityLost || !sample.slotFound) {
         tracking = false;
         if (pollTimer !== null) window.clearInterval(pollTimer);
         pollTimer = null;
@@ -243,11 +198,8 @@ export function mountApp(root: HTMLElement, state: State): void {
     } finally {
       polling = false;
       if (cueChanged) updateCue();
-      else {
-        if (cooldownChanged && settings.showCueOverlay && !placingOverlay) {
-          void cueOverlay.draw(upcoming(settings.upcomingAbilities));
-        }
-        refreshDiagnostics();
+      else if (cooldownChanged && settings.showCueOverlay && !placingOverlay) {
+        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
       if (retryAfter) scheduleRetry();
     }
@@ -264,7 +216,6 @@ export function mountApp(root: HTMLElement, state: State): void {
     tracking = true;
     pollTimer = window.setInterval(() => { void poll(); }, pollMs);
     void poll();
-    refreshDiagnostics(true);
     return true;
   };
 
@@ -279,15 +230,15 @@ export function mountApp(root: HTMLElement, state: State): void {
     drawSlot();
     if (settings.autoAdvanceRotation && state.active && scanResult.recognized) {
       if (!startTracking()) {
-        refreshDiagnostics(true);
         if (retryMissing) scheduleRetry(retryMs);
       }
     } else {
-      refreshDiagnostics(true);
       if (retryMissing) scheduleRetry(retryMs);
     }
     if (keybindsOpen) render();
   };
+
+  // *** Session controls
 
   const finishNavigation = (): void => {
     resetTracking();
@@ -303,6 +254,8 @@ export function mountApp(root: HTMLElement, state: State): void {
     nextCue();
   };
   a1lib.on("alt1pressed", keybindListener);
+
+  // *** Overlay positioning
 
   const updatePlacement = (message?: string): void => {
     const button = root.querySelector<HTMLButtonElement>("#settings-reposition-overlay");
@@ -367,11 +320,17 @@ export function mountApp(root: HTMLElement, state: State): void {
     a1lib.on("alt1pressed", placementListener);
   };
 
+  // *** Rendering and event
+
   const render = (): void => {
     const settingsBody = !keybindsOpen
       ? root.querySelector<HTMLElement>("#settings-backdrop .settings-modal-body")
       : null;
     if (settingsBody) settingsScroll = settingsBody.scrollTop;
+    const editorScrollTop = renderedCategory === state.category
+      ? root.querySelector<HTMLElement>(".rotation-list")?.scrollTop
+      : undefined;
+    renderedCategory = state.category;
 
     const activeChanged = lastActiveId !== state.activeId;
     const activatedId = activeChanged && state.active ? state.activeId : "";
@@ -383,11 +342,6 @@ export function mountApp(root: HTMLElement, state: State): void {
       engine.syncRotation(state.active);
     }
 
-    const expectedId = engine.currentStep()?.abilityId;
-    const currentObs = observation?.abilityId === expectedId
-      ? observation
-      : null;
-
     root.innerHTML = `
       <header class="app-titlebar">
         ${state.active
@@ -398,26 +352,11 @@ export function mountApp(root: HTMLElement, state: State): void {
             </div>`
           : "<h1>Rotation Cue</h1>"}
         <button class="settings-trigger" id="open-settings" type="button" title="Settings" aria-label="Open settings">⋯</button>
-        <span class="connection-dot ${isAlt1Available() ? "is-live" : ""}" title="${isAlt1Available() ? "Alt1 connected" : "Browser mode"}"></span>
       </header>
 
       <main class="rotation-editor" id="rotation-editor" aria-label="Rotation builder"></main>
 
-        ${panelMarkup({
-        result: scanResult,
-        scanning,
-        expectedAbilityId: expectedId,
-        currentStepIndex: engine.currentIndex(),
-        rotationStepCount: engine.stepCount(),
-        trackingEnabled: tracking,
-        observation: currentObs,
-        alt1Available: isAlt1Available(),
-        open: diagnosticsOpen,
-        visible: settings.showDiagnostics
-      })}
-      <footer class="app-footer${message ? " has-message" : ""}"><span>${message
-        ? escapeHtml(message)
-        : state.active ? `Active: ${escapeHtml(state.active.name)}` : "No active rotation"}</span></footer>
+      ${message ? `<div class="app-message">${escapeHtml(message)}</div>` : ""}
       ${settingsOpen
         ? keybindsOpen
           ? keybindModal(scanResult, keybinds, scanning, keybindBar)
@@ -435,6 +374,10 @@ export function mountApp(root: HTMLElement, state: State): void {
       onReset: resetCue,
       onMessage: showMessage
     });
+    if (editorScrollTop !== undefined) {
+      const list = root.querySelector<HTMLElement>(".rotation-list");
+      if (list) list.scrollTop = editorScrollTop;
+    }
     root.querySelector("#titlebar-previous-cue")?.addEventListener("click", previousCue);
     root.querySelector("#titlebar-reset-cue")?.addEventListener("click", resetCue);
     root.querySelector("#titlebar-next-cue")?.addEventListener("click", nextCue);
@@ -443,10 +386,6 @@ export function mountApp(root: HTMLElement, state: State): void {
     else if (!placingOverlay) void cueOverlay.draw(overlayCues);
     drawSlot();
 
-    root.querySelector(".diagnostics-panel")?.addEventListener("toggle", (event) => {
-      diagnosticsOpen = (event.currentTarget as HTMLDetailsElement).open;
-    });
-    bindDiagnostics(root);
     root.querySelector("#open-settings")?.addEventListener("click", () => {
       settingsScroll = 0;
       settingsOpen = true;
@@ -616,16 +555,6 @@ export function mountApp(root: HTMLElement, state: State): void {
         void cueOverlay.draw(upcoming(settings.upcomingAbilities));
       }
     });
-    root.querySelector<HTMLInputElement>("#settings-show-diagnostics")?.addEventListener("change", (event) => {
-      const checked = (event.currentTarget as HTMLInputElement).checked;
-      settings = {
-        ...settings,
-        showDiagnostics: checked
-      };
-      saveSettings(settings);
-      const panel = root.querySelector<HTMLElement>(".diagnostics-panel");
-      if (panel) panel.hidden = !checked;
-    });
     if (activatedId && isAlt1Available()) {
       window.setTimeout(() => {
         if (state.activeId === activatedId) void scanBars(false);
@@ -645,6 +574,8 @@ export function mountApp(root: HTMLElement, state: State): void {
     settingsOpen = false;
     render();
   });
+
+  // *** Cleanup
 
   const cleanup = (): void => {
     a1lib.removeListener("alt1pressed", keybindListener);

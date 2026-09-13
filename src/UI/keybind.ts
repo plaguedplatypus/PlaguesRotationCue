@@ -5,6 +5,8 @@ const storageId = "rotation-cue.visual-keybinds.v1";
 
 export type Keybinds = Record<string, string>;
 
+// *** Storage
+
 export function loadKeybinds(): Keybinds {
   try {
     const stored = JSON.parse(localStorage.getItem(storageId) ?? "null") as unknown;
@@ -20,6 +22,8 @@ export function loadKeybinds(): Keybinds {
 export function saveKeybinds(keybinds: Keybinds): void {
   localStorage.setItem(storageId, JSON.stringify(keybinds));
 }
+
+// *** Cue labels
 
 export function cueLabels(
   abilityId: string,
@@ -38,6 +42,8 @@ export function cueLabels(
     ? [keybind]
     : [keybind, "Alt+1"];
 }
+
+// *** Keybind modal
 
 export function modalMarkup(
   result: ScanResult | null,
@@ -177,6 +183,8 @@ function rowMarkup(slot: DetectedSlot, keybinds: Keybinds): string {
         data-value="${escapeHtml(value)}" aria-label="Set keybind for ${escapeHtml(name)}">${escapeHtml(value || "Unbound")}</button>
     </div>`;
 }
+
+// *** Key capture
 
 function keyFromEvent(event: KeyboardEvent): string | null {
   if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return null;
