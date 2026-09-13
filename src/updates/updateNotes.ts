@@ -35,7 +35,7 @@ export const releases: ReleaseNote[] = [
           "Cue Notes are Shown below the next playable cue in the Overlay.",
         ],
         image: {
-          src: "./screenshots/cueNotes.png",
+          src: "./screenshots/cueNote.png",
           alt: ""
         }
       },{
