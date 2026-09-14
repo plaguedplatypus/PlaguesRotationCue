@@ -119,18 +119,6 @@ export function modalMarkup(settings: Settings, positioning = false): string {
             </div>
           `)}
 
-          ${sectionMarkup("Support", `
-            <div class="support-links">
-              <a class="support-link" href="https://ko-fi.com/plaguedplatypus" target="_blank" rel="noopener noreferrer">
-                <img src="./assets/coffee.png" alt="" />
-                <span>Coffee!</span>
-              </a>
-              <a class="support-link" href="https://discord.com/invite/xAc578gPjW" target="_blank" rel="noopener noreferrer">
-                <img src="./assets/discord.png" alt="" />
-                <span>Join Discord</span>
-              </a>
-            </div>
-          `)}
         </div>
       </section>
     </div>`;
