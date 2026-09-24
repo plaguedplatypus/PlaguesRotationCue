@@ -101,7 +101,7 @@ export function modalMarkup(settings: Settings, positioning = false): string {
               ? "Move the preview where you want, then press Alt+1."
               : settings.overlayPosition ? "Custom position saved." : "Using the default position."}</p>
             ${rangeRow("Cue scale", "settings-cue-scale", 55, 100, 5, settings.cueScale, "%")}
-            ${selectRow("Shown Abilities", "settings-upcoming-count", ["1", "2", "3", "4"], String(settings.upcomingAbilities))}
+            ${selectRow("Shown Abilities", "settings-upcoming-count", ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"], String(settings.upcomingAbilities))}
             ${rangeRow("Border thickness", "settings-border-thickness", 0, 3, 1, settings.cueBorderThickness, "px")}
             ${colorRow("Border color", "settings-border-color", settings.cueBorderColor)}
             ${toggleRow("50% opacity", "settings-overlay-opacity", settings.overlayOpacity === 50)}
