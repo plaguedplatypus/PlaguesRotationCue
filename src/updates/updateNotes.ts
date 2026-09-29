@@ -17,36 +17,23 @@ export interface ReleaseNote {
 
 export const releases: ReleaseNote[] = [
   {
+    version: "1.3.1",
+    title: "Havenhythe part II",
+    items: [
+      "Added the new abilities:",
+      "Vital Drain - (Constitution/Utility)",
+      "Vampyre Slayer - (Constitution/Utility)",
+      "Sanguine Offering - (Magic)",
+    ]
+  },
+  {
     version: "1.3.0",
     title: "Rotation Notes",
-    sections: [
-      {
         items: [
           "Added '+ More' for Rotations:",
           "Add a 'Run-Once' rotation, add Editor Notes, or add Cue Notes.",
           "Editor Notes are in-line notes rows inside the rotation.",
         ],
-        image: {
-          src: "./screenshots/note.png",
-          alt: ""
-        }
-      },{
-        items: [
-          "Cue Notes are Shown below the next playable cue in the Overlay.",
-        ],
-        image: {
-          src: "./screenshots/cue_note.png",
-          alt: ""
-        }
-      },{
-        items: [
-        ],
-        image: {
-          src: "./screenshots/notes2.png",
-          alt: ""
-        }
-      }
-    ]
   },
   {
     version: "1.2.0",

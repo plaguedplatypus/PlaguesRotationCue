@@ -183,7 +183,8 @@ export const sections: readonly Section[] = [
       { id: "sonic_wave", cooldownSeconds: 15 },
       { id: "sunshine", cooldownSeconds: 60 },
       { id: "tsunami", cooldownSeconds: 60 },
-      { id: "wild_magic", cooldownSeconds: 5.4 }
+      { id: "wild_magic", cooldownSeconds: 5.4 },
+      { id: "sanguine_offering", cooldownSeconds: 90 },
     ]
   },
   {
@@ -322,6 +323,8 @@ export const sections: readonly Section[] = [
       { id: "transfigure", cooldownSeconds: 180 },
       { id: "tuskas_wrath", name: "Tuska's Wrath", cooldownSeconds: 15 },
       { id: "undead_slayer", cooldownSeconds: 60 },
+      { id: "vital_drain", cooldownSeconds: 90 },
+      { id: "vampyre_slayer", cooldownSeconds: 60 },
       { id: "weapon_special_attack" }
     ]
   },
