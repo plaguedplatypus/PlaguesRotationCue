@@ -17,6 +17,14 @@ export interface ReleaseNote {
 
 export const releases: ReleaseNote[] = [
   {
+    version: "1.3.2",
+    title: "Necromancy Items",
+    items: [
+      "Added Necromancy weapons to the Item Picker:",
+      "Omni Guard, Death Guard, Devourer's Guard.",
+    ]
+  },
+  {
     version: "1.3.1",
     title: "Havenhythe part II",
     items: [

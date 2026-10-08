@@ -471,6 +471,9 @@ export const sections: readonly Section[] = [
       { id: "nox_bow", name: "Noxious Longbow" },
       { id: "nox_scythe", name: "Noxious Scythe" },
       { id: "nox_staff", name: "Noxious Staff" },
+      { id: "death_guard", name: "Death Guard" },
+      { id: "omni_guard", name: "Omni Guard" },
+      { id: "devourers_guard", name: "Devourer's Guard" },
     ]
   },
   {
