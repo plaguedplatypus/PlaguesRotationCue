@@ -105,7 +105,7 @@ export const pickers: readonly Picker[] = [
   { id: "utility", label: "Utility abilities", icon: "./assets/const.png", categories: "all" },
   { id: "prayer", label: "Prayers", icon: "./assets/prayer.png", categories: "all" },
   { id: "item", label: "Items", icon: "./assets/items/eof.png", categories: "all" },
-  { id: "cue", label: "Cue markers", icon: "./assets/items/marker_phase.png", categories: "all" }
+  { id: "cue", label: "Cue markers", icon: "./assets/items/weapon_swap.png", categories: "all" }
 ];
 
 export const categoryUi: Readonly<Record<Category, {
@@ -469,6 +469,7 @@ export const sections: readonly Section[] = [
       { id: "fsoa", name: "Fractured Staff of Armadyl" },
       { id: "roar", name: "Roar of the Awakening" },
       { id: "dark_shard", name: "Dark Shard of Leng" },
+      { id: "malachis", name: "Malachi's Claw/Tooth" },
       { id: "nox_bow", name: "Noxious Longbow" },
       { id: "nox_scythe", name: "Noxious Scythe" },
       { id: "nox_staff", name: "Noxious Staff" },
@@ -485,9 +486,6 @@ export const sections: readonly Section[] = [
     categories: "all",
     scanByDefault: false,
     entries: [
-      { id: "marker_move", name: "Move" },
-      { id: "marker_phase", name: "Phase" },
-      { id: "marker_wait", name: "Wait" },
       { id: "weapon_swap", name: "Weapon Swap" }
     ]
   }
