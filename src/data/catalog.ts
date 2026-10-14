@@ -230,6 +230,7 @@ export const sections: readonly Section[] = [
       { id: "death_skulls", cooldownSeconds: 60 },
       { id: "finger_of_death" },
       { id: "invoke_death", cooldownSeconds: 4 },
+      { id: "invoke_arisen_flesh", cooldownSeconds: 3.6 },
       { id: "invoke_lob", name: "Invoke Lord of Bones" },
       { id: "life_transfer", cooldownSeconds: 45 },
       { id: "living_death", cooldownSeconds: 90 },
