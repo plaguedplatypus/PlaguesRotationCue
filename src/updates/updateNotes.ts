@@ -17,6 +17,15 @@ export interface ReleaseNote {
 
 export const releases: ReleaseNote[] = [
   {
+    version: "1.4.0",
+    title: "Cooldown Checker",
+    items: [
+      "Added cooldown check on rotation editor.",
+      "Added Invoke Arisen Flesh (Necromancy).",
+      "Added Malachi's crossbow to the Item Picker.",
+    ]
+  },
+  {
     version: "1.3.2",
     title: "Necromancy Items",
     items: [

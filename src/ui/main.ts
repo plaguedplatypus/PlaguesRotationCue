@@ -366,6 +366,7 @@ export function mountApp(root: HTMLElement, state: State): void {
 
     renderEditor(requireElement(root, "#rotation-editor"), state, {
       currentIndex: engine.currentIndex(),
+      loopAtEnd: settings.loopRotationAtEnd,
       canScan: isAlt1Available(),
       scanning,
       onScan: () => { void scanBars(); },
@@ -551,9 +552,8 @@ export function mountApp(root: HTMLElement, state: State): void {
       const loopRotationAtEnd = (event.currentTarget as HTMLInputElement).checked;
       settings = { ...settings, loopRotationAtEnd };
       saveSettings(settings);
-      if (settings.showCueOverlay && !placingOverlay) {
-        void cueOverlay.draw(upcoming(settings.upcomingAbilities));
-      }
+      render();
+      root.querySelector<HTMLInputElement>("#settings-loop-rotation")?.focus();
     });
     if (activatedId && isAlt1Available()) {
       window.setTimeout(() => {

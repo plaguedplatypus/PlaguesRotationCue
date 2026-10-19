@@ -249,8 +249,9 @@ button:disabled {
 
 .rotation-library-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
+  gap: 3px;
   min-height: 30px;
   padding: 2px 8px;
   border-top: 1px solid var(--gold3);
@@ -494,6 +495,106 @@ button:disabled {
   min-height: 22px;
 }
 
+/* *** Cooldown check */
+
+.rotation-cooldowns {
+  margin-top: 8px;
+  border-top: 1px solid var(--line2);
+  font-size: 11px;
+}
+
+.rotation-cooldowns summary {
+  padding: 4px 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rotation-cooldown-item {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.rotation-card [data-cooldown="ok"] {
+  --cooldown-color: var(--green);
+}
+
+.rotation-card [data-cooldown="warn"] {
+  --cooldown-color: #f2c94c;
+}
+
+.rotation-card [data-cooldown="early"] {
+  --cooldown-color: var(--red);
+}
+
+.rotation-cooldown-item {
+  border-left: 2px solid var(--cooldown-color);
+  padding-left: 5px;
+}
+
+.rotation-cooldown-header {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.rotation-cooldown-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rotation-cooldown-early {
+  color: var(--cooldown-color);
+}
+
+.rotation-cooldown-bar {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.rotation-cooldown-track {
+  position: relative;
+  height: 4px;
+  border-inline: 1px solid var(--muted);
+  background: linear-gradient(to right, var(--line) var(--repeat-at), var(--cooldown-color) var(--repeat-at));
+}
+
+.rotation-cooldown-track::after {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: var(--repeat-at);
+  width: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+  content: "";
+}
+
+.rotation-cooldown-times {
+  --repeat-width: 90px;
+  display: grid;
+  grid-template-columns:
+    minmax(max-content, clamp(0px,
+      calc(var(--repeat-at) - var(--repeat-width) / 2 - 4px),
+      calc(100% - var(--repeat-width) - 4px)))
+    var(--repeat-width);
+  gap: 4px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.rotation-cooldown-repeat {
+  text-align: center;
+}
+
+.sequence-step[data-cooldown] {
+  border-radius: 4px;
+  outline: 1px solid var(--cooldown-color);
+}
+
 /* *** Rotation sections */
 
 .rotation-section+.rotation-section {
@@ -721,21 +822,34 @@ button:disabled {
   pointer-events: none;
 }
 
-.sequence-number {
+.sequence-number,
+.sequence-cooldown {
   position: absolute;
   z-index: 2;
+  padding: 0 1px;
+  background: rgba(8, 10, 11, .88);
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+.sequence-number {
   top: 0;
   right: 0;
   min-width: 10px;
-  padding: 0 1px;
   border-top-right-radius: 4px;
-  background: rgba(8, 10, 11, .88);
-  color: #fff;
   font-size: 9px;
-  font-weight: 700;
   line-height: 12px;
-  text-align: center;
-  pointer-events: none;
+}
+
+.sequence-cooldown {
+  bottom: 0;
+  left: 0;
+  border-bottom-left-radius: 3px;
+  font-size: 7px;
+  letter-spacing: -.1px;
+  line-height: 10px;
 }
 
 .sequence-remove {

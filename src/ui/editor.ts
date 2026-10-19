@@ -1,5 +1,6 @@
 import { entriesForSection, pickerDef, pickerSectionsFor, entryById } from "../data/abilityData";
 import type { PickerId, CatalogItem } from "../data/abilityData";
+import { checkCooldowns, type Check } from "../rotation/cooldowns";
 import { loadCollapsedIds, saveCollapsedIds } from "../rotation/storage";
 import { cueNoteMaxChars, isAbility, isCueNote, type Section, type Step } from "../rotation/steps";
 import { parse, serialize } from "../rotation/transfer";
@@ -15,6 +16,7 @@ const labels: Record<Category, string> = {
 };
 
 const collapsed = new Set(loadCollapsedIds());
+const cooldownsOpen = new Set<string>();
 let picker: { rotationId: string; section: Section; replaceIndex: number | null } | null = null;
 let stepMenu: { rotationId: string; section: Section } | null = null;
 let textEditor: { rotationId: string; section: Section; index: number } | null = null;
@@ -23,6 +25,7 @@ let deleteId: string | null = null;
 
 export type EditorContext = {
   currentIndex: number;
+  loopAtEnd: boolean;
   canScan: boolean;
   scanning: boolean;
   onScan: () => void;
@@ -76,14 +79,18 @@ export function renderEditor(
   const addRotation = document.createElement("button");
   addRotation.type = "button";
   addRotation.className = "compact-button";
-  addRotation.textContent = "Add New Rotation";
+  addRotation.textContent = "New Rotation";
   addRotation.addEventListener("click", () => {
     state.rotations.forEach((rotation) => collapsed.add(rotation.id));
     if (textEditor) textEditor = null;
     saveCollapsedIds(collapsed);
     state.create();
   });
-  header.append(title, addRotation);
+  header.append(
+    title,
+    textBtn("Import", () => importRotation(state, context.onMessage)),
+    addRotation
+  );
 
   library.append(tabs, header);
 
@@ -204,8 +211,7 @@ function rotationCard(
   scan.disabled = !context.canScan || context.scanning;
   actions.append(
     scan,
-    textBtn("Export", () => exportRotation(rotation, context.onMessage)),
-    textBtn("Import", () => importRotation(state, context.onMessage))
+    textBtn("Export", () => exportRotation(rotation, context.onMessage))
   );
   if (active) {
     const recovery = document.createElement("div");
@@ -226,12 +232,114 @@ function rotationCard(
     playableIndex = appendSection(card, rotation, "once", playableIndex, active, state, context);
   }
   appendSection(card, rotation, "repeat", playableIndex, active, state, context);
+  card.append(cooldownView(rotation, card, context.loopAtEnd));
 
   if (picker?.rotationId === rotation.id) {
     card.classList.add("has-ability-picker");
     card.append(pickerView(rotation, state, context));
   }
   return card;
+}
+
+// *** Cooldown check
+
+function cooldownView(rotation: Rotation, card: HTMLElement, loopAtEnd: boolean): HTMLElement {
+  const { checks, unknown, onceSeconds, repeatSeconds } = checkCooldowns(rotation, loopAtEnd);
+  const issues = checks.filter((check) => check.status !== "ok");
+  const cautions = issues.filter((check) => check.status === "warn").length;
+  const early = issues.length - cautions;
+  const details = document.createElement("details");
+  details.className = "rotation-cooldowns";
+  details.open = cooldownsOpen.has(rotation.id);
+  details.addEventListener("toggle", () => {
+    if (!details.isConnected) return;
+    if (details.open) cooldownsOpen.add(rotation.id);
+    else cooldownsOpen.delete(rotation.id);
+  });
+  const summary = document.createElement("summary");
+  const counts = [
+    cautions ? `${cautions} caution${cautions === 1 ? "" : "s"}` : "",
+    early ? `${early} too early` : ""
+  ].filter(Boolean);
+  const status = counts.length ? counts.join(", ")
+    : checks.length ? "No conflicts found" : "No cooldown data";
+  const seconds = (onceSeconds + repeatSeconds).toFixed(1);
+  summary.textContent = `Cooldown Check · ~${seconds}s · ${status}${unknown ? ` · ${unknown} unchecked` : ""}`;
+  summary.title = rotation.once
+    ? `Estimated first pass: ${seconds}s (Run-Once ${onceSeconds.toFixed(1)}s + Rotation ${repeatSeconds.toFixed(1)}s).`
+    : `Estimated rotation duration: ${seconds}s per pass.`;
+  details.append(summary);
+
+  checks.forEach((check) => {
+    const tile = card.querySelector<HTMLElement>(
+      `.sequence-step[data-section="${check.section}"][data-step-index="${check.index}"]`
+    );
+    const message = cooldownMessage(check);
+    if (tile) {
+      tile.dataset.cooldown = check.status;
+      tile.title += `\n${message}`;
+      const button = tile.querySelector("button");
+      if (button) button.setAttribute("aria-label", `${button.getAttribute("aria-label")}. ${message}`);
+    }
+    if (check.status === "ok") return;
+    const item = document.createElement("div");
+    item.className = "rotation-cooldown-item";
+    item.dataset.cooldown = check.status;
+    const entry = entryById.get(check.abilityId)!;
+    const header = document.createElement("div");
+    header.className = "rotation-cooldown-header";
+    const icon = document.createElement("img");
+    icon.src = entry.icon;
+    icon.alt = "";
+    icon.width = 16;
+    icon.height = 16;
+    const label = document.createElement("span");
+    label.className = "rotation-cooldown-name";
+    label.textContent = entry.name;
+    const step = document.createElement("span");
+    step.textContent = `#${check.number}`;
+    step.setAttribute("aria-label", `Step ${check.number}`);
+    const early = document.createElement("span");
+    early.className = "rotation-cooldown-early";
+    early.textContent = `${check.earlyBy.toFixed(1)}s early`;
+    header.append(icon, label, step, early);
+    item.append(header, cooldownBar(check));
+    item.title = message;
+    details.append(item);
+  });
+  return details;
+}
+
+function cooldownBar(check: Check): HTMLElement {
+  const gap = check.gap!;
+  const bar = document.createElement("div");
+  bar.className = "rotation-cooldown-bar";
+  bar.style.setProperty("--repeat-at", `${gap / check.cooldown * 100}%`);
+  bar.setAttribute("role", "img");
+  bar.setAttribute("aria-label", `Estimated: used at 0s, repeats at ${gap.toFixed(1)}s, ready at ${check.cooldown}s.`);
+
+  const repeat = document.createElement("span");
+  repeat.className = "rotation-cooldown-repeat";
+  repeat.textContent = `Repeats at ${gap.toFixed(1)}s`;
+  const track = document.createElement("div");
+  track.className = "rotation-cooldown-track";
+  const times = document.createElement("div");
+  times.className = "rotation-cooldown-times";
+  const ready = document.createElement("span");
+  ready.textContent = `Cooldown ${check.cooldown}s`;
+  times.append(ready, repeat);
+  bar.append(track, times);
+  return bar;
+}
+
+function cooldownMessage(check: Check): string {
+  const name = entryById.get(check.abilityId)!.name;
+  const section = check.section === "once" ? "Run-Once" : "Rotation";
+  const status = check.status === "ok"
+    ? check.gap === undefined ? "Ready — first use"
+      : `Ready — reused approximately ${check.gap.toFixed(1)}s after its previous use`
+    : `${check.status === "warn" ? "Caution" : "Too early"} — repeats ${check.earlyBy.toFixed(1)}s before ready`;
+  return `${name} (${section}, step ${check.number}) · ${check.cooldown}s cooldown · ${status}`;
 }
 
 // *** Rotation sections
@@ -373,6 +481,7 @@ function deletePrompt(
   const confirmButton = textBtn("Delete", () => {
     deleteId = null;
     collapsed.delete(rotation.id);
+    cooldownsOpen.delete(rotation.id);
     saveCollapsedIds(collapsed);
     if (picker?.rotationId === rotation.id) picker = null;
     if (textEditor?.rotationId === rotation.id) textEditor = null;
@@ -451,6 +560,12 @@ function stepView(
   number.className = "sequence-number";
   number.textContent = String(playableIndex + 1);
   choose.append(icon, number);
+  if (entry?.cooldownSeconds !== undefined) {
+    const cooldown = document.createElement("span");
+    cooldown.className = "sequence-cooldown";
+    cooldown.textContent = `${entry.cooldownSeconds}s CD`;
+    choose.append(cooldown);
+  }
   choose.addEventListener("click", () => {
     picker = { rotationId: rotation.id, section, replaceIndex: index };
     renderEditor(element.closest(".rotation-editor") as HTMLElement, state, context);
@@ -522,10 +637,12 @@ function textStepView(
   });
   close.title = `Save and collapse ${cueNote ? "Cue Note" : "Note"}`;
   close.addEventListener("mousedown", (event) => event.preventDefault());
-  const remove = iconBtn("×", "Remove Cue Note", () => {
+  const remove = textBtn("Delete", () => {
     textEditor = null;
     state.removeStep(rotation.id, section, index);
   });
+  remove.title = "Delete Cue Note";
+  remove.setAttribute("aria-label", "Delete Cue Note");
   remove.classList.add("is-danger");
   remove.addEventListener("mousedown", (event) => event.preventDefault());
   const actions = document.createElement("div");
@@ -641,10 +758,12 @@ function noteView(
     state.replaceStep(rotation.id, section, index, { ...step, text: input.value });
   });
   done.addEventListener("mousedown", (event) => event.preventDefault());
-  const remove = iconBtn("×", "Remove Note", () => {
+  const remove = textBtn("Delete", () => {
     textEditor = null;
     state.removeStep(rotation.id, section, index);
   });
+  remove.title = "Delete Note";
+  remove.setAttribute("aria-label", "Delete Note");
   remove.classList.add("is-danger");
   remove.addEventListener("mousedown", (event) => event.preventDefault());
   input.addEventListener("keydown", (event) => {
